@@ -125,6 +125,20 @@
             }
         ]
     },
+    "ZH_Hto2C_Zto2L": {
+        "sample": "ZH_Hto2C_Zto2L",
+        "json_output"    : "datasets/Run3_MC_Sig.json",
+        "files": [
+            { "das_names": ["/ZH_Hto2C_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM"],
+              "metadata": {
+                  "year":"2022_postEE",
+                  "isMC": true,
+                  "xsec": 0.002324
+              }
+            }
+            
+        ]
+    },
 
 
     "DATA_DoubleMuon": {

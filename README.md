@@ -10,7 +10,14 @@
     pip install -e .
     ```
 	Follow [their installation instructions](https://pocketcoffea.readthedocs.io/en/latest/installation.html) for other options.
-4. Checkout *this* repo:
+        Afterwards please install the needed packages, that enable trainings and running the analysis smoothly. Please keep using conda, since using pip might 
+        alter the environment leading to conflicts.
+    ```
+	conda install conda-forge::xrootd
+	conda install -c conda-forge lightgbm
+    conda install conda-forge::tensorflow
+    ```
+5. Checkout *this* repo:
     ```
     git@github.com:cms-rwth/VHccPoCo.git
     ```
