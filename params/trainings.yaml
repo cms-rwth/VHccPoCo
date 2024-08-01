@@ -1,0 +1,29 @@
+Models:
+  'BDT':
+    '2L':
+      '2022_PostEE':
+        model_file: 'MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_model_DY.txt'
+      '2022_PostEE_low':
+        model_file: 'MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_low_model_DY.txt'
+      '2022_Post_EE_high':
+        model_file: 'MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_high_model_DY.txt'
+    '1L':
+       '2017':
+         model_file: 'MVA/BDT_models/signalCombo_WminusH_HToCC_WToLNu_2017_model_QCD.txt'
+    '0L':
+       '2017':
+         model_file: 'MVA/BDT_models/ZH_HToCC_ZToNuNu_2017_model_QCD.txt'
+  'DNN':
+    '2L':
+      '2022_PostEE':
+        model_file: 'MVA/DNN_models/ZH_Hto2C_Zto2L_2022_postEE_dnn_model.h5'
+      '2022_PostEE_low':
+        model_file: 'MVA/DNN_models/ZH_Hto2C_Zto2L_2022_postEE_low_dnn_model_DY.h5'
+      '2022_Post_EE_high':
+        model_file: 'MVA/DNN_models/ZH_Hto2C_Zto2L_2022_postEE_high_dnn_model_DY.h5'
+    '1L':
+       '2017':
+         model_file: 'MVA/DNN_models/signalCombo_WminusH_HToCC_WToLNu_2017_dnn_model_QCD.h5'
+    '0L':
+       '2017':
+         model_file: 'MVA/DNN_models/ZH_HToCC_ZToNuNu_2017_dnn_model_QCD.h5'

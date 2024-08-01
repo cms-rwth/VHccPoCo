@@ -37,45 +37,45 @@ files_2017 = [
     f"{localdir}/datasets/Run2UL2017_MC_VJets.json",
     f"{localdir}/datasets/Run2UL2017_MC_OtherBkg.json",
     f"{localdir}/datasets/Run2UL2017_DATA.json",
+    f"{localdir}/datasets/Run2UL2017_Signal.json"
 ]
 files_2018 = [
     f"{localdir}/datasets/Run2UL2018_MC_VJets.json",
     f"{localdir}/datasets/Run2UL2018_MC_OtherBkg.json",
     f"{localdir}/datasets/Run2UL2018_DATA.json",
 ]
-files_Run3 = [
-    f"{localdir}/datasets/Run3_MC_VJets.json",
-    f"{localdir}/datasets/Run3_MC_OtherBkg.json",
-    f"{localdir}/datasets/Run3_DATA.json",
-]
 
 parameters["proc_type"] = "ZNuNu"
 parameters["save_arrays"] = False
+parameters["LightGBM_model"] = f"{localdir}/Models/ZH_HToCC_ZToNuNu_2017/model_QCD.txt"
+parameters["DNN_model"] = f"{localdir}/Models/ZH_HToCC_ZToNuNu_2017/dnn_model_QCD.h5"
+parameters["separate_models"] = False
 
 cfg = Configurator(
     parameters = parameters,
     datasets = {
         "jsons": files_2016 + files_2017 + files_2018,
-        #"jsons": files_Run3,
-
 
         "filter" : {
             "samples": [
                 "DATA_MET",
-                "WW", "WZ", "ZZ",
-                "QCD", "QCD_Mu", "QCD_EM",
-                "DYJetsToLL_FxFx",
-                "ZJetsToNuNu_FxFx",
+                "WW", 
+                #"WZ", 
+                "ZZ",
+                "QCD", 
+                "QCD_Mu", "QCD_EM",
+                #"DYJetsToLL_FxFx",
+                #"ZJetsToNuNu_FxFx",
                 "WJetsToLNu_FxFx",
                 "WJetsToQQ", "ZJetsToQQ",
                 "TTToSemiLeptonic", "TTTo2L2Nu",
-                "TTToHadrons"
+                "TTToHadrons",
+                "ZH_HToCC_ZToNuNu"
             ],
             "samples_exclude" : [],
-            "year": ['2017']
+            "year": ['2017'],
             #"year": ['2016_PreVFP', '2016_PostVFP', '2017', '2018']
         },
-
         "subsamples": {
             'DYJetsToLL_MLM': {
                 'DiJet_incl': [passthrough],
@@ -114,7 +114,7 @@ cfg = Configurator(
         "SR_ZNuNu_2J_cJ":  [dijet_pt_cut, jet_met_dphi_cut, ctag_j1, dijet_mass_cut],
 
         "CR_ZNuNu_2J_LF": [dijet_pt_cut, jet_met_dphi_cut, antictag_j1, dijet_mass_cut],
-	"CR_ZNuNu_2J_HF": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut],
+	    "CR_ZNuNu_2J_HF": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut],
         "CR_ZNuNu_2J_CC": [dijet_pt_cut, jet_met_dphi_cut, ctag_j1, dijet_invmass_cut],
         "CR_ZNuNu_4J_TT": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut]
 
@@ -171,10 +171,23 @@ cfg = Configurator(
         "dijet_nom_dr" : HistConf( [Axis(coll="dijet", field="deltaR", bins=50, start=0, stop=5, label=r"$\Delta R_{jj}$")] ),
         "dijet_nom_pt" : HistConf( [Axis(coll="dijet", field="pt", bins=100, start=0, stop=500, label=r"$p_T{jj}$ [GeV]")] ),
 
-        "dijet_csort_m" : HistConf( [Axis(coll="dijet_csort", field="mass", bins=100, start=0, stop=700, label=r"$M_{jj}$ [GeV]")] ),
-        "dijet_csort_dr" : HistConf( [Axis(coll="dijet_csort", field="deltaR", bins=50, start=0, stop=5, label=r"$\Delta R_{jj}$")] ),
-        "dijet_csort_pt" : HistConf( [Axis(coll="dijet_csort", field="pt", bins=100, start=0, stop=500, label=r"$p_T{jj}$ [GeV]")] ),
-
+        "dijet_m" : HistConf( [Axis(field="dijet_m", bins=100, start=0, stop=600, label=r"$M_{jj}$ [GeV]")] ),
+        "dijet_pt" : HistConf( [Axis(field="dijet_pt", bins=100, start=0, stop=400, label=r"$p_T{jj}$ [GeV]")] ),
+        "dijet_dr" : HistConf( [Axis(field="dijet_dr", bins=50, start=0, stop=5, label=r"$\Delta R_{jj}$")] ),
+        "dijet_deltaPhi": HistConf( [Axis(field="dijet_deltaPhi", bins=50, start=0, stop=math.pi, label=r"$\Delta \phi_{jj}$")] ),
+        "dijet_deltaEta": HistConf( [Axis(field="dijet_deltaEta", bins=50, start=0, stop=4, label=r"$\Delta \eta_{jj}$")] ),
+        "dijet_pt_j1" : HistConf( [Axis(field="dijet_pt_max", bins=100, start=0, stop=400, label=r"$p_T{j1}$ [GeV]")] ),
+        "dijet_pt_j2" : HistConf( [Axis(field="dijet_pt_min", bins=100, start=0, stop=400, label=r"$p_T{j2}$ [GeV]")] ),
+        "dijet_CvsL_j1" : HistConf( [Axis(field="dijet_CvsL_max", bins=24, start=0, stop=1, label=r"$CvsL_{j1}$ [GeV]")] ),
+        "dijet_CvsL_j2" : HistConf( [Axis(field="dijet_CvsL_min", bins=24, start=0, stop=1, label=r"$CvsL_{j2}$ [GeV]")] ),
+        "dijet_CvsB_j1" : HistConf( [Axis(field="dijet_CvsB_max", bins=24, start=0, stop=1, label=r"$CvsB_{j1}$ [GeV]")] ),
+        "dijet_CvsB_j2" : HistConf( [Axis(field="dijet_CvsB_min", bins=24, start=0, stop=1, label=r"$CvsB_{j2}$ [GeV]")] ),
+        
+        "Z_pt": HistConf( [Axis(field="Z_pt", bins=100, start=0, stop=400, label=r"$p_T{Z}$ [GeV]")] ),
+        "dilep_dijet_ratio": HistConf( [Axis(field="ZH_pt_ratio", bins=100, start=0, stop=2, label=r"$\frac{p_T(jj)}{p_T(\ell\ell)}$")] ),
+        "dilep_dijet_dphi": HistConf( [Axis(field="ZH_deltaPhi", bins=50, start=0, stop=math.pi, label=r"$\Delta \phi (\ell\ell, jj)$")] ),
+        
+        
         "HT":  HistConf( [Axis(field="JetGood_Ht", bins=100, start=0, stop=900, label=r"Jet HT [GeV]")] ),
         "met_pt": HistConf( [Axis(coll="MET", field="pt", bins=50, start=100, stop=600, label=r"MET $p_T$ [GeV]")] ),
         "met_phi": HistConf( [Axis(coll="MET", field="phi", bins=64, start=-math.pi, stop=math.pi, label=r"MET $phi$")] ),
@@ -182,11 +195,12 @@ cfg = Configurator(
         "met_deltaPhi_j1": HistConf( [Axis(field="deltaPhi_jet1_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 1)")] ),
         "met_deltaPhi_j2": HistConf( [Axis(field="deltaPhi_jet2_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 2)")] ),
 
-
-        "BDT": HistConf( [Axis(field="BDT", bins=20, start=-1, stop=1, label="BDT")],
-                         only_categories = ['SR_ZNuNu_2J_cJ']),
-
-
+        "BDT": HistConf( [Axis(field="BDT", bins=24, start=0, stop=1, label="BDT")],
+                         only_categories = ['SR_ZNuNu_2J_cJ','baseline_Met_2J_ptcut']),
+        "DNN": HistConf( [Axis(field="DNN", bins=24, start=0, stop=1, label="DNN")],
+                         only_categories = ['SR_ZNuNu_2J_cJ','baseline_Met_2J_ptcut']),
+        
+        
         # 2D plots
 	"Njet_Ht": HistConf([ Axis(coll="events", field="nJetGood",bins=[0,2,3,4,8],
                                    type="variable",   label="N. Jets (good)"),
