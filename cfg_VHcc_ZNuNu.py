@@ -3,14 +3,14 @@ from pocket_coffea.lib.cut_definition import Cut
 from pocket_coffea.lib.cut_functions import get_nObj_min, get_HLTsel
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
-import workflow
-from workflow import VHccBaseProcessor
+import workflow_VHcc
+from workflow_VHcc import VHccBaseProcessor
 
 import CommonSelectors
 from CommonSelectors import *
 
 import cloudpickle
-cloudpickle.register_pickle_by_value(workflow)
+cloudpickle.register_pickle_by_value(workflow_VHcc)
 cloudpickle.register_pickle_by_value(CommonSelectors)
 
 import os
@@ -26,6 +26,7 @@ parameters = defaults.merge_parameters_from_files(default_parameters,
                                                   f"{localdir}/params/triggers.yaml",
                                                   f"{localdir}/params/ctagging.yaml",
                                                   f"{localdir}/params/xgboost.yaml",
+                                                  f"{localdir}/params/trainings.yaml",
                                                   update=True)
 
 files_2016 = [
@@ -53,9 +54,8 @@ files_Run3 = [
 
 parameters["proc_type"] = "ZNuNu"
 parameters["save_arrays"] = False
-parameters["LightGBM_model"] = f"{localdir}/Models/ZH_HToCC_ZToNuNu_2017/model_QCD.txt"
-parameters["DNN_model"] = f"{localdir}/Models/ZH_HToCC_ZToNuNu_2017/dnn_model_QCD.h5"
 parameters["separate_models"] = False
+parameters['run_dnn'] = False
 
 cfg = Configurator(
     parameters = parameters,

@@ -3,14 +3,14 @@ from pocket_coffea.lib.cut_definition import Cut
 from pocket_coffea.lib.cut_functions import get_nObj_min, get_HLTsel
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
-import workflow
-from workflow import VHccBaseProcessor
+import workflow_VHcc
+from workflow_VHcc import VHccBaseProcessor
 
 import CommonSelectors
 from CommonSelectors import *
 
 import cloudpickle
-cloudpickle.register_pickle_by_value(workflow)
+cloudpickle.register_pickle_by_value(workflow_VHcc)
 cloudpickle.register_pickle_by_value(CommonSelectors)
 
 import os
@@ -26,6 +26,7 @@ parameters = defaults.merge_parameters_from_files(default_parameters,
                                                   f"{localdir}/params/triggers.yaml",
                                                   f"{localdir}/params/ctagging.yaml",
                                                   f"{localdir}/params/xgboost.yaml",
+                                                  f"{localdir}/params/trainings.yaml",
                                                   update=True)
 files_2016 = [
     f"{localdir}/datasets/Run2UL2016_MC_VJets.json",
@@ -50,14 +51,9 @@ files_Run3 = [
 ]
 
 parameters["proc_type"] = "ZLL"
-parameters["save_arrays"] = False
-parameters["LightGBM_model"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/model_DY.txt"
-parameters["DNN_model"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/dnn_model.h5"
+parameters["save_arrays"] = True
 parameters["separate_models"] = False
-parameters["LigtGBM_low"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/_low/model_DY.txt"
-parameters["LigtGBM_high"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/_high/model_DY.txt"
-parameters["DNN_low"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/_low/dnn_model_DY.h5"
-parameters["DNN_high"] = f"{localdir}/Models/ZH_Hto2C_Zto2L_2022_postEE/_high/dnn_model_DY.h5"
+parameters['run_dnn'] = False
 
 cfg = Configurator(
     parameters = parameters,
@@ -86,7 +82,7 @@ cfg = Configurator(
             #"year": ['2016_PreVFP', '2016_PostVFP','2017','2018']
             #"year": ['2022_preEE','2022_postEE','2023_preBPix','2023_postBPix']
 
-            "year": ['2022_preEE','2022_postEE']
+            "year": ['2022_postEE']
             #"year": ['2023_preBPix']
         },
 
