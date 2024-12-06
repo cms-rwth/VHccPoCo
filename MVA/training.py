@@ -3,7 +3,7 @@ import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 import argparse
 import glob
-import os
+import os, gc
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, roc_auc_score, log_loss
 
@@ -11,9 +11,11 @@ from imblearn.over_sampling import SMOTE
 import numpy as np
 import awkward as ak
 from coffea.util import load
+from concurrent.futures import ThreadPoolExecutor
+cpucount = len(os.sched_getaffinity(0))
+print(f"Found {cpucount} CPUs.")
 
-
-def get_inputs(channel,model_type):
+def get_inputs(channel,model_type='gnn'):
     if model_type in ["lgbm","dnn"]:
         if channel == "ZLL":
             inps = ["dilep_m","dilep_pt","dilep_dr","dilep_deltaPhi","dilep_deltaEta",
@@ -21,7 +23,7 @@ def get_inputs(channel,model_type):
                     "dijet_CvsL_max","dijet_CvsL_min","dijet_CvsB_max","dijet_CvsB_min",
                     "dijet_pt_max","dijet_pt_min",
                     "ZH_pt_ratio","ZH_deltaPhi","deltaPhi_l2_j1","deltaPhi_l2_j2",
-                    "MET_pt","MET_phi","nPV","LeptonCategory"]
+                    "PuppiMET_pt","PuppiMET_phi","nPV","LeptonCategory"]
         if channel == "WLnu":
             inps = ["dijet_m","dijet_pt","dijet_dr","dijet_deltaPhi","dijet_deltaEta",
                     "dijet_CvsL_max","dijet_CvsL_min","dijet_CvsB_max","dijet_CvsB_min",
@@ -42,19 +44,19 @@ def get_inputs(channel,model_type):
                     "LeptonGood_miniPFRelIso_all","LeptonGood_pfRelIso03_all",
                     "LeptonGood_pt","LeptonGood_eta","LeptonGood_phi","LeptonGood_mass",
                     "ll_pt","ll_eta","ll_phi","ll_mass",
-                    "MET_pt","MET_phi","nPV","LeptonCategory"]
+                    "PuppiMET_pt","PuppiMET_phi","nPV","LeptonCategory"]
         if channel == "WLNu":
             inps = ["JetGood_btagCvL","JetGood_btagCvB",
                     "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
                     "LeptonGood_miniPFRelIso_all","LeptonGood_pfRelIso03_all",
                     "LeptonGood_pt","LeptonGood_eta","LeptonGood_phi","LeptonGood_mass",
                     "W_pt","W_eta","W_phi","W_mt",
-                    "MET_pt","MET_phi","nPV","W_m","LeptonCategory"]
+                    "PuppiMET_pt","PuppiMET_phi","nPV","W_m","LeptonCategory"]
         if channel == "ZNuNu":
             inps = ["JetGood_btagCvL","JetGood_btagCvB",
                     "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
                     "Z_pt","Z_eta","Z_phi","Z_m",
-                    "MET_pt","MET_phi","nPV"]
+                    "PuppiMET_pt","PuppiMET_phi","nPV"]
 
 
     inps = ["EventNr"]+inps
@@ -71,19 +73,51 @@ def get_SR_name(channel):
         return "SR_Znn_2J_cJ"
     raise NotImplementedError("Need to hardcode the names of the channels.")
 
-def load_files(dr,SR,cols):
+def load_files(dr, SR, cols, test=False):
     all_files = glob.glob(f"{dr}/**/{SR}/*.parquet", recursive=True)
-    dfs = [pd.read_parquet(file,columns=cols) for file in all_files]
-    return pd.concat(dfs, ignore_index=True)
+    if any([f for f in all_files if "_bx" in f]):
+        print("\tWill explicity remove bc/cx/ll directories.")
+        all_files = [f for f in all_files if "DiJet_bx" not in f and "DiJet_cx" not in f and "DiJet_ll" not in f]
+    ln = len(all_files)
+    if test:        
+        all_files = all_files[:min(5,ln)]
+        ln = len(all_files)
+
+    def read_file(file):
+        readarr =  ak.from_parquet(file, columns=cols)
+        return readarr
+
+    batchsize = 4000
+    if ln > batchsize:
+        print(f"\t{ln} files! That's a lot of files!")
+        arrs = []
+        
+        for i in range(ln//batchsize+1):
+            frm = i*batchsize
+            to = min(ln,(i+1)*batchsize)
+            if to>=frm:
+                arrs.append(read_file(all_files[frm:to]))
+        return ak.concatenate(arrs)
+    else:
+        return read_file(all_files)
 
 def apply_norm(dr,SR,coffeafile,df):
     sampname = dr.split('/')[-1]
     sumwtdict = coffeafile['sumw'][SR][sampname]
-    sumw = sumwtdict[list(sumwtdict.keys())[0]]
-    print(f"Process {sampname}:\n\tEffective sumw = {sumw}")
+    signofwt = coffeafile['sum_signOf_genweights'][sampname]
 
-    thiswt = df['weight'].sum()
-    print(f"\tGenweight sum = {thiswt}")
+    sumw = sumwtdict[list(sumwtdict.keys())[0]]
+    print(f"\tEffective sumw = {sumw}")
+
+    # thiswt = df['weight'].sum()
+    # print(f"\tGenweight sum = {thiswt}")
+
+    df['weight'] =  df['weight']/signofwt
+    thiswt = ak.sum(df['weight'])
+    print(f"\tReweighted sum = {thiswt}")
+    return df
+
+    #Following is to use on the signs of weights, i.e. +1 or -1 per event
 
     df['weight'] = np.where(df['weight']>0,1,-1)
     thiswt = df['weight'].sum()
@@ -94,76 +128,142 @@ def apply_norm(dr,SR,coffeafile,df):
     print(f"\tReweighted sum = {thiswt}")
     return df
 
-# Function to load data
-def load_data(dir_path, channel, model_type, test, coffea):
-    signal_files = []
-    SR = get_SR_name(channel)
+def addmissingcols(df):
+    keys = df.fields
+    ln = len(df)
+    optionaljagged = ['events_LeptonGood_miniPFRelIso_all',
+       'events_LeptonGood_pfRelIso03_all', 'events_LeptonGood_pt',
+       'events_LeptonGood_eta', 'events_LeptonGood_phi',
+       'events_LeptonGood_mass']
+    optionalnames = ['events_W_m','events_LeptonCategory']
 
+    rename = {"events_ll_pt" : "events_V_pt",
+            "events_ll_eta" : "events_V_eta",
+            "events_ll_phi" : "events_V_phi",
+            "events_ll_mass" : "events_V_mass",
+            "events_W_pt" : "events_V_pt",
+            "events_W_eta" : "events_V_eta",
+            "events_W_phi" : "events_V_phi",
+            "events_W_mt" : "events_V_mass",
+            "events_Z_pt" : "events_V_pt",
+            "events_Z_eta" : "events_V_eta",
+            "events_Z_phi" : "events_V_phi",
+            "events_Z_m" : "events_V_mass",
+            }
+
+    for opt in optionalnames:
+        if opt not in keys:
+            df[opt] = 0
+    for opt in optionaljagged:
+        if opt not in keys:
+            df[opt] = np.zeros([ln, 1]).tolist()
+    for ren in rename:
+        if ren in keys:
+            df[rename[ren]] = df[ren]
+    for key in df.fields:
+        if key.startswith("events_"):
+            df[key.replace("events_","")] = df[key] 
+
+    cols =      ['EventNr',"JetGood_btagCvL","JetGood_btagCvB",
+                "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
+                "LeptonGood_miniPFRelIso_all","LeptonGood_pfRelIso03_all",
+                "LeptonGood_pt","LeptonGood_eta","LeptonGood_phi","LeptonGood_mass",
+                "V_pt","V_eta","V_phi","V_mass",
+                "PuppiMET_pt","PuppiMET_phi","nPV","W_m",
+                "LeptonCategory","weight"]
+
+    return df[cols]
+
+def getchannel(dirname):
+    if "ZLL" in dirname:
+        return "ZLL", 2
+    if "WLNu" in dirname:
+        return "WLNu", 1
+    if "ZNuNu" in dirname:
+        return "ZNuNu", 0
+    raise NotImplementedError(f"Could not determine channel for directory {dirname}")
+
+def getera(dirname):
+    if "2022_preEE" in dirname:
+        return 0
+    if "2022_postEE" in dirname:
+        return 1
+    if "2023_preBPix" in dirname:
+        return 2
+    if "2023_postBPix" in dirname:
+        return 3
+    raise NotImplementedError(f"Could not determine era for directory {dirname}")
+
+def getcols(channel,model_type='gnn'):
     cols = get_inputs(channel,model_type)
     if model_type == "gnn":
         colsMC = cols + ["weight"]
     else:
         colsMC = cols
     colsdata = cols
+    return colsMC,colsdata
 
+# Function to load data
+def load_data(dir_path, test, coffea):
+    signal_files = [] 
 
-    alldirs = glob.glob(f"{dir_path}/*")
+    if isinstance(dir_path,str):
+        dir_path = [dir_path]
+    alldirs = []
+    channelnames = []
+    for dr in dir_path:
+        if "Saved_columnar_arrays" not in dr:
+            subdirs = [d for d in glob.glob(f"{dr}/*") if "Saved_columnar_arrays" in d]
+            if len(subdirs) == 0:
+                raise ValueError(f"Input director {dr} is neither a `Saved_columnar_arrays*` directory, nor has a subdirectory of that name.")
+            else:
+                dr = subdirs[0]
+        newlist = glob.glob(f"{dr}/*")
+        alldirs.extend(newlist)
+        thischannel = getchannel(dr)
+        channelnames.extend([thischannel]*len(newlist))
 
     data_dfs = []
     bkg_dfs = []
     sig_dfs = []
 
-    if model_type=="gnn":
-        coffeafile = load(f"{dir_path}/../{coffea}")
+    
 
-    for dr in alldirs:
-        samp = dr.split('/')[-1]
+    for idr, dr in enumerate(alldirs):
+        samp = '/'.join(dr.split('/')[-2:])
+        print(f"Process {samp}:")
+        channel, ich = channelnames[idr]
+        era = getera(dr)
+        SR = get_SR_name(channel)
+        colsMC,colsdata = getcols(channel,'gnn')        
         if "DATA_" in dr:
-            if test and len(data_dfs) >= 1: continue
-            data_dfs.append(load_files(dr,SR,colsdata))
-            print(f"{samp} added to data.")
+            print("\tLoading data is deprecated.")
+            continue    #deprecate this
         else:
+            coffeafile = load(f"{dr}/../../{coffea}")
             if test:
                 if len(sig_dfs) >= 1 and "Hto2C" in dr: continue
                 if len(bkg_dfs) >= 1 and "Hto2C" not in dr: continue
 
-            thisdf = load_files(dr,SR,colsMC)
-            if model_type=="gnn":
-                thissf = apply_norm(dr,SR,coffeafile,thisdf)
+            thisdf = load_files(dr,SR,colsMC,test)
+            thisdf = apply_norm(dr,SR,coffeafile,thisdf)
+            del coffeafile
+            thisdf = addmissingcols(thisdf)
+            thisdf["channel"] = ich
+            thisdf["era"] = era
             if "Hto2C" in dr:
                 sig_dfs.append(thisdf)
-                print(f"\t{samp} added to signal.")
+                print(f"\tAdded to signal and assigned era {era}, channel {ich}.")
             else:
                 bkg_dfs.append(thisdf)
-                print(f"\t{samp} added to background.")
+                print(f"\tAdded to background and assigned era {era}, channel {ich}.")
 
 
-    signal_df = pd.concat(sig_dfs, ignore_index=True)
-    background_df = pd.concat(bkg_dfs, ignore_index=True)
-    if len(data_dfs)==0:
-        print("No data! Not a problem for training though.")
-        data_df = None
-    else:
-        data_df = pd.concat(data_dfs, ignore_index=True)
-        print("Data DataFrame columns:", data_df.columns)
-    
-    print("Signal DataFrame columns:", signal_df.columns)
-    print("Background DataFrame columns:", background_df.columns)
-    
+    signal_df = ak.concatenate(sig_dfs)
+    background_df = ak.concatenate(bkg_dfs)
 
-    return signal_df, background_df, data_df
+    return signal_df, background_df
 
-def get_background_abbreviation(background_names):
-    abbreviations = []
-    if any('DY' in name or 'dy' in name for name in background_names):
-        abbreviations.append('DY')
-    if any('TT' in name or 'tt' in name for name in background_names):
-        abbreviations.append('TT')
-    if any('QCD' in name or 'qcd' in name for name in background_names):
-        abbreviations.append('QCD')
-    if not abbreviations:  # If no specific backgrounds were found, consider it as 'Other Backgrounds'
-        return 'OB'
-    return '_'.join(abbreviations)
 
 def splitdata(X,y,e=None):
     if e is None:
@@ -180,100 +280,12 @@ def splitdata(X,y,e=None):
         y_test = y.loc[test_indices]
     return X_train, X_test, y_train, y_test
 
-def train_model(X, y, e, X_data, signal_name):
-    X_train, X_test, y_train, y_test = splitdata(X,y,e)
 
-    train_data = lgb.Dataset(X_train, label=y_train)
-    valid_data = lgb.Dataset(X_test, label=y_test)
-    valid_sets = [valid_data]
+def evaluate_model(y, input_y_pred, input_y_wts=None, plot_dir=None, suff=""):
 
-    params = {
-        'objective': 'binary',
-        'metric': 'binary_logloss',
-        'verbose': 2,
-    }
-
-    bst = lgb.train(params, train_data, num_boost_round=100, valid_sets=valid_sets, 
-                    callbacks=[lgb.early_stopping(stopping_rounds=10)])
-
-    # Create directory for the model if it doesn't exist
-    background_abbreviation = "all"
-    
-    model_dir = f'Models/{signal_name}'
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-
-    # Save the model with the signal name
-    model_path = os.path.join(model_dir, f'model_{background_abbreviation}.txt')
-    bst.save_model(model_path)
-    evaluate_model(bst, X_test, y_test, X_data, signal_name, 'lgbm')
-    
-    print("hello, you just made it here")
-
-    return bst
-
-def custom_binary_crossentropy(y_true, y_pred):
-    y_pred = K.clip(y_pred, K.epsilon(), 1.0 - K.epsilon())
-    return K.mean(-y_true * K.log(y_pred) - (1.0 - y_true) * K.log(1.0 - y_pred))
-
-def train_dnn(X, y, e, X_data, signal_name):
-    from keras.models import Sequential
-    from keras.callbacks import EarlyStopping, ReduceLROnPlateau
-    from keras.models import load_model
-    from keras.optimizers import Adam
-    from keras import backend as K
-    from keras import regularizers
-    from keras.layers import Dense, BatchNormalization, LeakyReLU, Input
-    from keras.optimizers import RMSprop
-
-    print(f"Original X: {X.shape[0]} rows")
-    print(f"Original y: {y.shape[0]} rows")
-
-    X_train, X_test, y_train, y_test = splitdata(X,y,e)
-
-    model = Sequential()
-    model.add(Dense(128, input_dim=X_train.shape[1]))
-    model.add(BatchNormalization())
-    model.add(LeakyReLU())
-    model.add(Dense(64))
-    model.add(BatchNormalization())
-    model.add(LeakyReLU())
-    model.add(Dense(32))
-    model.add(BatchNormalization())
-    model.add(LeakyReLU())
-    model.add(Dense(1, activation='sigmoid'))
-
-    optimizer = RMSprop(learning_rate=3e-3)
-    model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-
-    early_stopping = EarlyStopping(monitor='val_loss', patience=80)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.7, patience=20, min_lr=1e-8)
-
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1500, callbacks=[early_stopping,reduce_lr], batch_size=2048*16)
-    
-    background_abbreviation = "all"
-    
-    model_dir = f'Models/{signal_name}'
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-        
-    model_path = os.path.join(model_dir, f'dnn_model_{background_abbreviation}.h5')
-    model.save(model_path)
-    evaluate_model(model, X_test, y_test, X_data, signal_name, 'dnn')
-
-    return model
-
-# Function to evaluate model
-def evaluate_model(model, X, y, X_data, signal_name, model_type, input_y_pred=None, input_y_wts=None, plot_dir=None):
-    if model_type == 'lgbm':
-        y_pred = model.predict(X)
-        data_pred = model.predict(X_data)
-    elif model_type == 'dnn':
-        y_pred = model.predict(X).ravel()
-        data_pred = model.predict(X_data).ravel()
-    elif model_type == 'gnn':
-        y_pred = input_y_pred
-        data_pred = None
+    y_pred = input_y_pred
+    data_pred = None
+    model_type = 'gnn'
 
     fpr, tpr, _ = roc_curve(y, y_pred,sample_weight=input_y_wts)
     auc = roc_auc_score(y, y_pred)
@@ -285,7 +297,6 @@ def evaluate_model(model, X, y, X_data, signal_name, model_type, input_y_pred=No
 
     loss = log_loss(y, y_pred)
 
-    
     print(f'Log Loss: {loss}')
 
     if plot_dir is None:
@@ -296,10 +307,9 @@ def evaluate_model(model, X, y, X_data, signal_name, model_type, input_y_pred=No
     plt.figure()
     plt.hist(y_pred[y == 0], bins=50, alpha=0.5, label='Background', density=True)
     plt.hist(y_pred[y == 1], bins=50, alpha=0.5, label='Signal', density=True)
-    if data_pred is not None: plt.hist(data_pred[data_pred<0.7], bins=50, alpha=0.75, label='Data', density=True)   #ALWAYS BLIND THIS above 0.7!!!
     plt.xlabel('Score')
     plt.legend()
-    plt.savefig(f'{plot_dir}/Score_{model_type}.png')
+    plt.savefig(f'{plot_dir}/Score_{model_type}_{suff}.png')
 
     # Plot ROC curve
     plt.figure()
@@ -311,125 +321,92 @@ def evaluate_model(model, X, y, X_data, signal_name, model_type, input_y_pred=No
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic')
+    plt.title(suff)
     plt.legend(loc='lower right')
-    plt.savefig(f'{plot_dir}/roc_curve_{model_type}.png')
+    plt.savefig(f'{plot_dir}/roc_curve_{model_type}_{suff}.png')
 
     plt.close()
     return auc
 
 
-def process_gnn_inputs(X,intype="pd",channel="ZLL"):
+def resize_arr(arr,target):
+    m, n, p = arr.shape
+    
+    if n > target:
+        return arr[:, :target, :]
+    elif n < target:
+        padding = numpy.zeros([m, target - n, p])
+        return numpy.concatenate([arr, padding], dim=1)
+    else:
+        return arr
+
+def process_jagged(arr,maxelems=6):
+    N = np.max(ak.num(arr, axis=1))  
+    padded = ak.pad_none(arr, max(N,maxelems), axis=1)
+    unzipped = ak.unzip(padded)
+    padded = [ak.fill_none(p,0.).to_numpy() for p in unzipped]
+    arr = np.array(padded)
+    arr = np.transpose(arr, (1,2,0))
+    arr = resize_arr(arr,maxelems)
+    return arr
+
+def process_gnn_inputs(df,intype="pd",removenans=True,verbose=False):
     #TODO: intype "ak" does not work yet
 
     import torch
+    
     tensors = {}
 
-    if channel=="ZLL":
-                        # Jagged? max len if jagged? 
-        elements = {
-            "JetGood":      [True,6],
-            "LeptonGood":   [True,2],
-            "ll":           [False,0]
-        }
-        globalvars = ["MET_pt","MET_phi","nPV"]
-        categorical = ["LeptonCategory"]
-    elif channel=="WLNu":
-                        # Jagged? max len if jagged? 
-        elements = {
-            "JetGood":      [True,6],
-            "LeptonGood":   [True,1],
-            "W":           [False,0]
-        }
-        globalvars = ["MET_pt","MET_phi","nPV","W_m"]
-        categorical = ["LeptonCategory"]
-    elif channel=="ZNuNu":
-                        # Jagged? max len if jagged? 
-        elements = {
-            "JetGood":      [True,6],
-            "LeptonGood":   None,
-            "Z":           [False,0]
-        }
-        globalvars = ["MET_pt","MET_phi","nPV"]
-        categorical = None
+    jetelems =  ["JetGood_btagCvL","JetGood_btagCvB",
+                "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass"]
+    lepelems =  ["LeptonGood_miniPFRelIso_all","LeptonGood_pfRelIso03_all",
+                "LeptonGood_pt","LeptonGood_eta","LeptonGood_phi","LeptonGood_mass"]
+    flatelems = ["V_pt","V_eta","V_phi","V_mass",
+                "PuppiMET_pt","PuppiMET_phi","nPV","W_m",
+                "LeptonCategory","channel","era"]
     
-    
+    X = df[jetelems + lepelems + flatelems]
+    del df
 
-    for ie,elem in enumerate(elements.keys()):
-        if elements[elem] is None:
-            tensors[elem] = [torch.tensor([1])]
-            tensors[elem+"P4"] = [torch.tensor([1])]
-            continue
+    if verbose: print("Processing jets...")
+    thisX = X[jetelems]  
+    thisX = process_jagged(thisX,6)
+    tensors["jet"] = torch.tensor(thisX[:,:,:2],dtype=torch.float32)
+    tensors["jetP4"] = torch.tensor(thisX[:,:,2:],dtype=torch.float32)
 
-        isJagged = elements[elem][0]
-        maxelems = elements[elem][1]
+    if verbose: print("Processing leptons...")
+    thisX = X[lepelems]
+    thisX = process_jagged(thisX,2)
+    tensors["lep"] = torch.tensor(thisX[:,:,:2],dtype=torch.float32)
+    tensors["lepP4"] = torch.tensor(thisX[:,:,2:],dtype=torch.float32)
 
-        if intype == "pd":
-            columns = [i for i in X.columns if i.startswith(f"events_{elem}_")]
-            thisX = X[columns].to_numpy()
-            
-        elif intype == "ak":
-            columns = [i for i in X.fields if i.startswith(f"{elem}_")]
-            thisX = X[columns]
-        
+    if verbose: print("Processing other variables...")
+    thisX = ak.unzip(X[flatelems])
+    thisX = [a.to_numpy() for a in thisX]
+    thisX = np.transpose(np.array(thisX))
 
-        if isJagged:
-            if intype == "pd":
-                thisX = ak.Array(thisX)
-                ax = 2
-            elif intype == "ak":
-                ax = 1
 
-            N = np.max(ak.num(thisX, axis=ax))            
-            padded = ak.fill_none(ak.pad_none(thisX, max(N,maxelems), axis=ax), 0)
-            if intype == "pd":
-                thisX = ak.to_numpy(padded)
-            elif intype == "ak":
-                thisX = np.array([ak.fill_none(padded[cn],0) for cn in padded.fields])
+    tensors["VP4"] = torch.tensor(thisX[:,:4],dtype=torch.float32)
+    tensors["global"] = torch.tensor(thisX[:,4:8],dtype=torch.float32)
+    tensors["category"] = torch.tensor(thisX[:,8:],dtype=torch.int64)
 
-            if intype == "pd": thisX = np.transpose(thisX, (0,2,1))
-            elif intype == "ak": thisX = np.transpose(thisX, (2,0,1))
-            
-            thisX = thisX[:,:maxelems,:]
-
-        for ic,c in enumerate(columns):
-            thiscol = thisX[...,ic]
-
-            if not c.endswith('_pt') and not c.endswith('_eta') and not c.endswith('_phi') and not c.endswith('_mass') and not c.endswith('_mt') and not c.endswith('_m'):  #non-P4, if any
-                if elem in tensors:
-                    tensors[elem].append(torch.tensor(thiscol,dtype=torch.float32))
+    nanmask = None
+    if removenans:
+        for t in tensors:
+            if torch.any(torch.isnan(tensors[t])):
+                print(f"Spotted NaN value(s) in {t} tensor!")
+                thismask = torch.any(torch.isnan(tensors[t]),-1)
+                if len(thismask.shape) > 1:   #for 3-dim tensors
+                    thismask = torch.any(thismask,-1)
+                if nanmask is None:
+                    nanmask = thismask
                 else:
-                    tensors[elem] = [torch.tensor(thiscol,dtype=torch.float32)]
+                    nanmask = (nanmask) | (thismask)
+        if nanmask is not None:
+            for t in tensors:
+                tensors[t] = tensors[t][~nanmask]
 
-            for suff in ['_pt','_eta','_phi','_mass','_mt','_m']:      #in that order
-                if c.endswith(suff):
-                    elemp4 = elem+"P4"
-                    if elemp4 in tensors:
-                        tensors[elemp4].append(torch.tensor(thiscol,dtype=torch.float32))
-                    else:
-                        tensors[elemp4] = [torch.tensor(thiscol,dtype=torch.float32)]
-                    if suff in ['_mass','_mt','_m']: break  #Make sure only one is added if there are multiple
-
-    for t in tensors:
-        tensors[t] = torch.stack(tensors[t],dim=-1)
-
-    pref = ""
-    if intype == "pd": pref = "events_"
-
-    #global vars
-    columns = [pref+i for i in globalvars]
-    thisX = X[columns].to_numpy()
-    tensors["global"] = torch.tensor(thisX,dtype=torch.float32)
-
-    #categorical
-    if categorical is None:
-        tensors["categorical"] = torch.tensor([1])
-    else:
-        columns = [pref+i for i in categorical]
-        thisX = X[columns].to_numpy()
-        tensors["categorical"] = torch.tensor(thisX,dtype=torch.int64)
-
-    return tensors
+    return tensors, nanmask
 
 def split_list(lst, m):
     n = len(lst)
@@ -445,21 +422,21 @@ def split_list(lst, m):
     
     return splits
 
-def train_gnn(X, y, signame, test, w=None, e=None, channel="ZLL", hyperparameter=False, ntrials=20):
+def train_gnn(X, y, signame, test, w=None, e=None, hyperparameter=False, ntrials=20, loadmodel=None):
     import torch, optuna
     from gnnmodels import runGNNtraining
 
     print("Processing dataframes into tensors.")
 
-    tensors = process_gnn_inputs(X,channel=channel)
+    tensors, nanmask = process_gnn_inputs(X,verbose=True)
+    del X
+    gc.collect()
+    if nanmask is not None:
+        y = y[~nanmask.numpy()]
+        if w is not None: w = w[~nanmask.numpy()]
+        if e is not None: e = e[~nanmask.numpy()]
 
-    
-    if channel == "ZLL" or channel == "ZNuNu":
-        globdim = 3
-    elif channel == "WLNu":
-        globdim = 4
-    
-    outdir = f"Models/2022preEE/{channel}/{signame}_vs_all/gnn"
+    outdir = f"Models/global/gnn"
     print("Will store model in:",outdir)
 
     if hyperparameter:        
@@ -473,144 +450,51 @@ def train_gnn(X, y, signame, test, w=None, e=None, channel="ZLL", hyperparameter
         cpu_list = list(os.sched_getaffinity(0))
         print("Available cpus:",cpu_list)
         cpu_allocations = split_list(cpu_list,ngpu)
-        func = lambda trial: runGNNtraining(tensors,y,outdir,test,w,e,channel=channel,globdim=globdim,trial=trial,ngpu=ngpu,cpulist=cpu_allocations)
+        func = lambda trial: runGNNtraining(tensors,y,outdir,test,w,e,trial=trial,ngpu=ngpu,cpulist=cpu_allocations)
         print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
         print(f"OPTUNA will run {ngpu} jobs in parallel.")
         print("Starting jobs...\n\n")
         study.optimize(func, n_trials=ntrials, n_jobs=ngpu)
         print("\n\nResult:", study.best_params)
     else:
-        runGNNtraining(tensors,y,outdir,test,w,e,channel=channel,globdim=globdim)
+        runGNNtraining(tensors,y,outdir,test,w,e,loadmodel=loadmodel)
         
 
 # Main function to load data and train/evaluate model
 def main():
-    parser = argparse.ArgumentParser(description='Train or evaluate a LightGBM model.')
-    parser.add_argument('mode', type=str, help='Mode: "train" or "eval".')
-    parser.add_argument('dir_path', type=str, help='Path to the directory containing input files.')
-    # parser.add_argument('--signal', '-s', type=str, nargs='+', help='Name of the signal data file.')
-    # parser.add_argument('--background', '-b', type=str, nargs='+', help='Name of the bkg data files.')
+    parser = argparse.ArgumentParser(description='Train or evaluate a GNN model.')
+    parser.add_argument('--dir_path', '-d', type=str, nargs='+', help='Path to the directory containing input files.')
     parser.add_argument('--model', type=str, help='Path to the model file (for evaluation only).')
-    parser.add_argument('--model_type', type=str, default='lgbm', choices=['lgbm', 'dnn', 'gnn'], help='The type of model to train.')
-    parser.add_argument('--channel', type=str, default='ZLL', choices=['ZLL', 'WLNu', 'ZNuNu'], help='Channel (to determine the input variables).')
     parser.add_argument('--coffea', type=str, default='output_all.coffea', help='Name of the coffea hist file.')
-    parser.add_argument('--separate_trainings', action='store_true',
-                    help='Enable separate trainings for dilep_pt < 150 and dilep_pt > 150 regions')
     parser.add_argument('--test', action='store_true', help='Run with only one file.')
     parser.add_argument('--hyperparameter', action='store_true', help='Do hyperparameter optimization.')
     parser.add_argument('--ntrials', type=int, default=20, help='Number of trials for hyperparameter optimization.')
+    parser.add_argument('--loadmodel', type=str, default=None, help='Load a previously trained .pt model.')
     args = parser.parse_args() 
 
-    if args.hyperparameter and args.model_type!='gnn':
-        raise NotImplementedError(f"Hyperparameter optimization has not been implemented for {arg.model_type}.")
+    if args.loadmodel and args.hyperparameter:
+        raise ValueError("Cannot do hyperparameter optimization while loadmodel is specified.") 
 
-    if args.separate_trainings and args.model_type=='gnn':
-        raise NotImplementedError(f"Separate training has not been implemented for {arg.model_type}.")
-
-    signal_df, background_df, data_df = load_data(args.dir_path, args.channel, args.model_type, args.test, args.coffea)
+    signal_df, background_df= load_data(args.dir_path, args.test, args.coffea)
     
-    print(f"Signal DataFrame shape: {signal_df.shape}")
-    signal_df = signal_df.dropna()
-    background_df = background_df.dropna()
-    if data_df is not None:
-        data_df = data_df.dropna()
-    
-    # Before the training or evaluation process
-    # if isinstance(args.signal, list) and len(args.signal) > 1:
-    #     # Concatenate signal names with a delimiter for readability
-    #     concatenated_signals = "_".join(sorted(args.signal))  # Sort to ensure consistency
-    #     common_signal_name = f"signalCombo_{concatenated_signals}"  # Prefix with 'signalCombo_' for clarity
-    # else:        
-    #     common_signal_name = args.signal if isinstance(args.signal, str) else args.signal[0]
     common_signal_name = "Hto2C"
 
-    #columns_to_exclude = ['dilep_m']
-    #signal_df = signal_df.drop(columns=columns_to_exclude, errors='ignore') 
-    #background_df = background_df.drop(columns=columns_to_exclude, errors='ignore') 
-    #data_df = data_df.drop(columns=columns_to_exclude, errors='ignore')  
-    if args.separate_trainings:
-        signal_df_low = signal_df[signal_df['dilep_pt'] < 150]
-        signal_df_high = signal_df[signal_df['dilep_pt'] >= 150]
-        background_df_low = background_df[background_df['dilep_pt'] < 150]
-        background_df_high = background_df[background_df['dilep_pt'] >= 150]
-        data_df_low = data_df[data_df['dilep_pt'] < 150]
-        data_df_high = data_df[data_df['dilep_pt'] >= 150]
-        signal_df_low['target'] = 1
-        background_df_low['target'] = 0
-        signal_df_high['target'] = 1
-        background_df_high['target'] = 0
-        df_low = pd.concat([signal_df_low, background_df_low], ignore_index=True)   
-        df_high = pd.concat([signal_df_high, background_df_high], ignore_index=True) 
-
-        X_low = df_low.drop('target', axis=1)
-        y_low = df_low['target']
-        smote_low = SMOTE(random_state=42)
-        X_low, y_low = smote_low.fit_resample(X_low, y_low)
-        X_high = df_high.drop('target', axis=1)
-        y_high = df_high['target']
-        smote_high = SMOTE(random_state=45)
-        X_high, y_high = smote_high.fit_resample(X_high, y_high)
-        print(f"After SMOTE, counts of label '1': {sum(y_low == 1)}")
-        print(f"After SMOTE, counts of label '0': {sum(y_low == 0)}")
-        print(f"After SMOTE, counts of label '1' in high: {sum(y_high == 1)}")
-        print(f"After SMOTE, counts of label '0' in high: {sum(y_high == 0)}")
-
-    
-    # Add target column to signal and background dataframes
     signal_df['target'] = 1
     background_df['target'] = 0
-    
-    # Determine the minority class
-    minority_class = 'signal' if len(signal_df) < len(background_df) else 'background'
 
-    print(f"Minority class: {minority_class}")
-
-    # Concatenate signal and background dataframes
-    df = pd.concat([signal_df, background_df], ignore_index=True)    
+    df = ak.concatenate([signal_df, background_df])    
 
     print(f"Length of signal_df: {len(signal_df)}")
     print(f"Length of background_df: {len(background_df)}")
     
-    X = df.drop(['target','events_EventNr'], axis=1)
-    if data_df is not None: data_df = data_df.drop('events_EventNr', axis=1)
+    fields = df.fields
+
+    X = df[[f for f in fields if f!='target' and f!='EventNr' and f!='weight']]
     y = df['target']
-    e = df['events_EventNr']
-    if args.model_type=="gnn":
-        w = df["weight"]
-        X = X.drop("weight", axis=1)
+    e = df['EventNr']
+    w = df["weight"]
 
-    if args.model_type in ['lgbm','dnn']:
-        smote = SMOTE(random_state=43)
-        X, y = smote.fit_resample(X, y)
-        
-        print(f"After SMOTE, counts of label '1': {sum(y == 1)}")
-        print(f"After SMOTE, counts of label '0': {sum(y == 0)}")
-
-        if args.mode == 'train':
-            if args.model_type == 'lgbm':
-                if args.separate_trainings:
-                    #TODO: Fix the even-odd splitting 
-                    model_low = train_model(X_low, y_low, None, data_df_low, "common_signal_name" + '_low', args.background)
-                    model_high = train_model(X_high, y_high, None, data_df_high, common_signal_name + '_high', args.background)
-                else:
-                    model = train_model(X, y, e, data_df, common_signal_name, args.background)
-            elif args.model_type == 'dnn':
-                if args.separate_trainings:
-                    #TODO: Fix the even-odd splitting 
-                    model_low = train_dnn(X_low, y_low, None, data_df_low, common_signal_name + '_low', args.background)
-                    model_high = train_dnn(X_high, y_high, None, data_df_high, common_signal_name + '_high', args.background)
-                else:
-                    model = train_dnn(X, y, e, data_df, common_signal_name, args.background)
-                
-        elif args.mode == 'eval':
-            if args.model_type == 'lgbm':
-                model = lgb.Booster(model_file=args.model)
-            elif args.model_type == 'dnn':
-                model = load_model(args.model)
-            evaluate_model(model, X, y, e, data_df, args.signal, args.model_type)
-    
-    elif args.model_type == "gnn":
-        train_gnn(X, y, common_signal_name, args.test, w, e, args.channel, args.hyperparameter, args.ntrials)
+    train_gnn(X, y, common_signal_name, args.test, w, e, args.hyperparameter, args.ntrials, args.loadmodel)
 
 if __name__ == "__main__":
     main()

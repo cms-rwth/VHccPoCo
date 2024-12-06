@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 from coffea.util import load
+from glob import glob
 
 import matplotlib.pyplot as plt
 import boost_histogram as bh
@@ -146,7 +147,7 @@ def makeBins(sigWeights, bkgWeights, sigMVAScores, bkgMVAScores, title,
         plt.yscale("log")
         plt.title(title+" sig bkg")
         plt.legend()
-        plt.show()
+        plt.savefig("flatbinning.png")
 
 
     targetBin = 0
@@ -253,7 +254,7 @@ def makeBins(sigWeights, bkgWeights, sigMVAScores, bkgMVAScores, title,
         plt.yscale("log")
         plt.title(title+" sig bkg")
         plt.legend()
-        plt.show()
+        plt.savefig("final1.png")
     
     
         # plot binwise asimo signifiance
@@ -262,7 +263,7 @@ def makeBins(sigWeights, bkgWeights, sigMVAScores, bkgMVAScores, title,
         
         plt.title(title+" significance")
         plt.legend()
-        plt.show()
+        plt.savefig("final2.png")
         
         
         # plot binwise background uncertainty
@@ -273,7 +274,7 @@ def makeBins(sigWeights, bkgWeights, sigMVAScores, bkgMVAScores, title,
         plt.title(title+" bkg uncert")
         
         plt.legend()
-        plt.show()
+        plt.savefig("final3.png")
     
     return(sigSumFinal, bins)
 
@@ -287,15 +288,11 @@ def findFiles(directory):
     Returns:
         files: list of files
     """
-    files = []
-    for subDir in os.listdir(directory):
-        
-        if(os.path.isfile(subDir) or ".parquet" in subDir):
-            if(".parquet" in subDir):
-                files.append(directory+"/"+subDir)
-        else:
-            files += findFiles(directory+"/"+subDir)
-    return(files)
+    print(directory)
+    files = glob(f'{directory}/**/*.parquet',recursive=True)
+    files = [f for f in files if "DiJet_ll" not in f]
+
+    return files 
 
 def getScale(genWeights, file):
     """
@@ -328,7 +325,7 @@ def getScale(genWeights, file):
 
 def doBin(coffeafile, coffeaWeights, topDir, signalProccesses, yearList, 
           channelList, name, minBinSize=0.01, maxBinSize=10,
-          binSizeSearchIncrement=0.01, sigCut=0.01, uncertCut=0.3, 
+          binSizeSearchIncrement=0.002, sigCut=0.002, uncertCut=0.3, 
           doPlot=False):
     """
     Perform the binning.
@@ -359,58 +356,48 @@ def doBin(coffeafile, coffeaWeights, topDir, signalProccesses, yearList,
     # get the normalization dictionary
     coffeafile = load(coffeafile)
     genWeights = coffeafile[coffeaWeights]
-    
-    dirmaps = {"sig":[],"bkg":[]}
-    
-    # recursively find all parquet files
-    files = findFiles(topDir)
-    
-    # iterate over files
-    for file in files:
-        # Remove data
-        if("DATA" in file):
-            continue
-        passYear = False
-        
-        # Select correct year
-        for year in yearList:
-            if(year in file):
-                passYear = True
-        if(not passYear):
-            continue
-        # Select correct channel
-        passChannel = False
-        for channel in channelList:
-            if(channel in file):
-                passChannel=True
-        if(not passChannel):
-            continue
-        
-        # Determine if signal or background, store appropriately
-        isSig = False
-        for sigProc in signalProccesses:
-            if(sigProc in file):
-                isSig = True
-        if(isSig):
-            dirmaps["sig"].append(file)
-        else:
-            dirmaps["bkg"].append(file)
-            
-    # load weights and scores from parquet files
+
+    subdirs = glob(topDir+"/*")
     sig_Gnn = []
     sig_weights = []
     bkg_Gnn = []
     bkg_weights = []
-    for file in dirmaps["bkg"]:
-        df = pd.read_parquet(file)
-        scale = getScale(genWeights, file)
-        bkg_Gnn.append(df["events_GNN"])
-        bkg_weights.append(df["weight"]/scale)
-    for file in dirmaps["sig"]:
-        df = pd.read_parquet(file)
-        scale = getScale(genWeights, file)
-        sig_Gnn.append(df["events_GNN"])
-        sig_weights.append(df["weight"]/scale)
+
+    for subd in subdirs:
+        if "DATA_" in subd: continue
+
+        passYear = False
+        for year in yearList:
+            if(year in subd):
+                passYear = True
+        if(not passYear):
+            continue
+
+        filelist = []
+        for channel in channelList:
+            filelist.extend(glob(f"{subd}/**/{channel}/*.parquet",recursive=True))
+
+        filelist = [f for f in filelist if "DiJet_incl" not in f]
+        if len(filelist) == 0: continue
+
+        df = pd.read_parquet(filelist,columns=["weight","events_GNN"])
+        sampname = subd.split('/')[-1]
+        scale = genWeights[sampname]
+        print("Done reading",sampname)
+
+        isSig = False
+        for sigProc in signalProccesses:
+            if(sigProc in subd):
+                isSig = True
+
+        if(isSig):
+            sig_Gnn.append(df["events_GNN"])
+            sig_weights.append(df["weight"]/scale)
+            print(f"\t{sampname} labelled as signal.")
+        else:
+            bkg_Gnn.append(df["events_GNN"])
+            bkg_weights.append(df["weight"]/scale)
+ 
     sig_Gnn = np.concatenate(sig_Gnn)
     sig_weights = np.concatenate(sig_weights)
     bkg_Gnn = np.concatenate(bkg_Gnn)
@@ -419,21 +406,33 @@ def doBin(coffeafile, coffeaWeights, topDir, signalProccesses, yearList,
     # Run the algorithm
     sigSum, bins = makeBins(sig_weights, bkg_weights, sig_Gnn, bkg_Gnn, name,
                             minBinSize, maxBinSize, binSizeSearchIncrement,
-                            sigCut, uncertCut, doPlot=False)
+                            sigCut, uncertCut, doPlot=True)
     return(sigSum, bins)
         
 def main():
     coffeafile = "output_all.coffea"
     coffeaWeights = "sum_signOf_genweights"
-    topDir = "Saved_columnar_arrays_ZLL"
+    topdir = [d for d in glob('./*') if "Saved_columnar_arrays_" in d][0]
+    print("Top directory:",topdir)
+
+    if "ZLL" in topdir:
+        channels = [["SR_ll_2J_cJ"],["SR_ll_2J_cJ"]] 
+        names = ["2l_2022_preEE","2l_2022_postEE"]
+    if "WLNu" in topdir:
+        channels = [["SR_Wln_2J_cJ"]] 
+        names = ["0l_2022_preEE"]
+    if "ZNuNu" in topdir:
+        channels = [["SR_Znn_2J_cJ"]] 
+        names = ["0l_2022_postEE"]
+
+
     signalProccesses = ["Hto2C"]
-    years = [["2022_preEE"], ["2022_postEE"]]
-    channels = [["SR_ll_2J_cJ"],["SR_ll_2J_cJ"]] 
-    names = ["2l_2022_preEE", "2l_2022_postEE"]
+    years = [["2022_preEE"]]
+    
     for year in years:
         for name, channel in zip(names, channels):
             print(name, channel)
-            sig, bins = doBin(coffeafile, coffeaWeights, topDir, signalProccesses, year, channel, name)
+            sig, bins = doBin(coffeafile, coffeaWeights, topdir, signalProccesses, year, channel, name)
             print(bins)
 if(__name__=="__main__"):
     main()

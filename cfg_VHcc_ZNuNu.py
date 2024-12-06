@@ -1,7 +1,7 @@
 from pocket_coffea.utils.configurator import Configurator
 from pocket_coffea.lib.cut_definition import Cut
 from pocket_coffea.lib.cut_functions import get_nObj_min, get_HLTsel
-from pocket_coffea.lib.cut_functions import get_nPVgood, goldenJson, eventFlags
+from pocket_coffea.lib.cut_functions import get_nPVgood, goldenJson, eventFlags, get_JetVetoMap
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
 from pocket_coffea.lib.columns_manager import ColOut
@@ -10,6 +10,7 @@ import workflow_VHcc
 from workflow_VHcc import VHccBaseProcessor
 import MVA
 from MVA.gnnmodels import GraphAttentionClassifier
+from MVA.training import process_gnn_inputs
 
 import CommonSelectors
 from CommonSelectors import *
@@ -128,12 +129,12 @@ cfg = Configurator(
     },
 
     workflow = VHccBaseProcessor,
-
-    workflow_options = {"dump_columns_as_arrays_per_chunk": f"{outputdir}/Saved_columnar_arrays_ZNuNu"} if parameters["save_arrays"] else {},
+    workflow_options = {"dump_columns_as_arrays_per_chunk": f"{outputdir}/Saved_columnar_arrays_ZNuNu"},
 
 
     skim = [get_HLTsel(primaryDatasets=["MET"]),
             get_nObj_min(2, 32., "Jet"),
+            get_JetVetoMap(),
             get_nPVgood(1), eventFlags, goldenJson],
 
     preselections = [met_2jets_0lep],
@@ -156,27 +157,37 @@ cfg = Configurator(
     columns = {
         "common": {
             "bycategory": {
+                "SR_Znn_2J_cJ": [
+                    ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
+                                        "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
+                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
+                                        "JetGood_btagCvL","JetGood_btagCvB",
+                                        "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
+                                        "Z_pt","Z_eta","Z_phi","Z_m",
+                                        "PuppiMET_pt","PuppiMET_phi","nPV"] + [
+                                        "GNN","GNN_transformed"
+                                        ] if parameters['run_gnn'] else [], flatten=False),
+                ],
+                "baseline_Met_2J_ptcut": [
+                    ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
+                                        "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
+                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
+                                        "JetGood_btagCvL","JetGood_btagCvB",
+                                        "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
+                                        "Z_pt","Z_eta","Z_phi","Z_m",
+                                        "PuppiMET_pt","PuppiMET_phi","nPV"], flatten=False),
+                ]
+            }
+        },
+    } if parameters["save_arrays"] else {
+        "common": {
+            "bycategory": {
                     "SR_Znn_2J_cJ": [
-                        ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
-                                            "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
-                                            "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
-                                            "JetGood_btagCvL","JetGood_btagCvB",
-                                            "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
-                                            "Z_pt","Z_eta","Z_phi","Z_m",
-                                            "MET_pt","MET_phi","nPV"], flatten=False),
-                    ],
-                    "presel_Met_2J_no_ctag": [
-                        ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
-                                            "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
-                                            "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
-                                            "JetGood_btagCvL","JetGood_btagCvB",
-                                            "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
-                                            "Z_pt","Z_eta","Z_phi","Z_m",
-                                            "MET_pt","MET_phi","nPV"], flatten=False),
+                        ColOut("events", ["GNN","GNN_transformed"], flatten=False),
                     ]
                 }
         },
-    },
+    } if parameters['run_gnn'] else {},
 
     weights = {
         "common": {
@@ -226,6 +237,7 @@ cfg = Configurator(
 
 
         "dijet_nom_m" : HistConf( [Axis(coll="dijet", field="mass", bins=100, start=0, stop=700, label=r"$M_{jj}$ [GeV]")] ),
+        "dijet_nom_m_zoom" : HistConf( [Axis(coll="dijet", field="mass", bins=50, start=50, stop=200, label=r"$M_{jj}$ [GeV]")] ),
         "dijet_nom_dr" : HistConf( [Axis(coll="dijet", field="deltaR", bins=50, start=0, stop=5, label=r"$\Delta R_{jj}$")] ),
         "dijet_nom_pt" : HistConf( [Axis(coll="dijet", field="pt", bins=100, start=0, stop=500, label=r"$p_T{jj}$ [GeV]")] ),
 
@@ -247,17 +259,17 @@ cfg = Configurator(
 
 
         "HT":  HistConf( [Axis(field="JetGood_Ht", bins=100, start=0, stop=900, label=r"Jet HT [GeV]")] ),
-        "met_pt": HistConf( [Axis(coll="MET", field="pt", bins=50, start=100, stop=600, label=r"MET $p_T$ [GeV]")] ),
-        "met_phi": HistConf( [Axis(coll="MET", field="phi", bins=64, start=-math.pi, stop=math.pi, label=r"MET $phi$")] ),
+        "met_pt": HistConf( [Axis(coll="PuppiMET", field="pt", bins=50, start=100, stop=600, label=r"PuppiMET $p_T$ [GeV]")] ),
+        "met_phi": HistConf( [Axis(coll="PuppiMET", field="phi", bins=64, start=-math.pi, stop=math.pi, label=r"PuppiMET $phi$")] ),
 
         "met_deltaPhi_j1": HistConf( [Axis(field="deltaPhi_jet1_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 1)")] ),
         "met_deltaPhi_j2": HistConf( [Axis(field="deltaPhi_jet2_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 2)")] ),
 
-        "BDT": HistConf( [Axis(field="BDT", bins=1000, start=0, stop=1, label="BDT")],
+        "BDT": HistConf( [Axis(field="BDT", bins=10000, start=0, stop=1, label="BDT")],
                          only_categories = ['SR_Znn_2J_cJ']),
-        "DNN": HistConf( [Axis(field="DNN", bins=1000, start=0, stop=1, label="DNN")],
+        "DNN": HistConf( [Axis(field="DNN", bins=10000, start=0, stop=1, label="DNN")],
                          only_categories = ['SR_Znn_2J_cJ']),
-        "GNN": HistConf( [Axis(field="GNN", bins=1000, start=0, stop=1, label="GNN")],
+        "GNN": HistConf( [Axis(field="GNN", bins=10000, start=0, stop=1, label="GNN")],
                          only_categories = ['SR_Znn_2J_cJ']),
 
         "BDT_coarse": HistConf( [Axis(field="BDT", bins=24, start=0, stop=1, label="BDT")],
@@ -266,7 +278,12 @@ cfg = Configurator(
                                 only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
         "GNN_coarse": HistConf( [Axis(field="GNN", bins=24, start=0, stop=1, label="GNN")],
                                 only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
+      
+        "GNN_transformed": HistConf( [Axis(field="GNN_transformed", bins=10000, start=0, stop=1, label="GNN")],
+                         only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
 
+        "GNN_transformed_coarse": HistConf( [Axis(field="GNN_transformed", bins=24, start=0, stop=1, label="GNN")],
+                         only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
 
         # 2D plots
 	    "Njet_Ht": HistConf([ Axis(coll="events", field="nJetGood",bins=[0,2,3,4,8],

@@ -26,11 +26,13 @@ def testFileStructure(hists, example_variable, example_data, example_MC, example
     print('\n\t Draw it: \n', hists["variables"][example_variable][example_MC][f'{example_MC}_{era0}'][{'cat':example_category, 'variation': variation}])
 
 
-def convertCoffeaToRoot(coffea_file_name, config):
+def convertCoffeaToRoot(coffea_file_name, config, inputera):
 
     inputfile = coffea_file_name
     Channel = config["input"]["channel"]
     eras = config["input"]["eras"]
+    if inputera is not None:
+        eras = [inputera]
     variations = config["input"]["variations"]
 
     example_variable = config["config"]["example_variable"]
@@ -130,11 +132,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Coffea to ROOT converter with a specified config file.")
     parser.add_argument( "inputfile", type=str, default="", help="Path to the input .coffea file.")
     parser.add_argument( "-c", "--config", dest="config", type=str, default="config.yaml", help="Path to the configuration YAML file.")
+    parser.add_argument( "-e", "--era", type=str, default=None, help="Override era in the config")
     args = parser.parse_args()
 
     config_path = args.config
     config = load_config(config_path)
     coffea_file_name = args.inputfile
-    convertCoffeaToRoot(coffea_file_name, config)
+    convertCoffeaToRoot(coffea_file_name, config, args.era)
 
     print("... and goodbye.")

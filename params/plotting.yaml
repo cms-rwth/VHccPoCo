@@ -54,8 +54,8 @@ plotting_style:
     # WminusH_Hto2C_WtoLNu: 2000
     # WplusH_Hto2C_WtoLNu: 2000
     # WH_Hto2C_WtoLNu: 2000
-    Hcc: 10000
-    Hbb: 10000
+    Hcc: 4000
+    Hbb: 4000
       
   labels_mc:
     DYJetsToLL_MLM: Z+jets (LO)
@@ -122,6 +122,8 @@ plotting_style:
       BDT_coarse: [0.7, 1]
       DNN_coarse: [0.7, 1]
       GNN_coarse: [0.7, 1]
+      GNN_transformed: [0.3,1]
+      GNN_transformed_coarse: [0.3,1]
 
   print_info:
     category: True

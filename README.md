@@ -19,9 +19,9 @@
 	conda install conda-forge::xrootd
 	conda install conda-forge::lightgbm
 	conda install conda-forge::tensorflow
-    conda install pytorch::pytorch
-    conda install conda-forge:alive-progress
-    conda install conda-forge:optuna
+  conda install pytorch::pytorch        # This is not tested to work. If it fails, use `pip install torch`
+  conda install conda-forge:alive-progress
+  conda install conda-forge:optuna
     ```
     For brux20 cluster at Brown, you may need `conda install conda-forge::ca-certificates`.
 3. Checkout *this* repo:

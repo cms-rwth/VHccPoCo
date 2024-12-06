@@ -44,7 +44,7 @@ Models:
       '2018':
         model_file: '${config_dir:}/../MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_model_DY.txt'
       '2022_preEE':
-        model_file: '${config_dir:}/../MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_model_DY.txt'
+        model_file: '${config_dir:}/../MVA/BDT_models/model_DY.txt'
       '2022_postEE':
         model_file: '${config_dir:}/../MVA/BDT_models/ZH_Hto2C_Zto2L_2022_postEE_model_DY.txt'
       '2023_preBPix':
@@ -172,6 +172,9 @@ Models:
       '2023_postBPix':
           model_file: '${config_dir:}/../MVA/DNN_models/ZH_HToCC_ZToNuNu_2017_dnn_model_QCD.h5'
   'GNN':
+    'Global':
+      model_file: '${config_dir:}/../MVA/GNN_models/Global/gnn.pt'
+      params: '${config_dir:}/../MVA/GNN_models/Global/modelparams.pkl'
     '2L':
       '2022_preEE':
         model_file: '${config_dir:}/../MVA/GNN_models/ZH_Hto2C_Zto2L_2022_preEE/gnn.pt'

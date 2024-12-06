@@ -50,70 +50,56 @@ class GraphDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        orderoftensors = ['JetGood', 'JetGoodP4', 'LeptonGood', 'LeptonGoodP4', 'ZP4', 'global', 'categorical']
-        array = []
-        for d in orderoftensors:
-            if len(self.data[d])>1:
-                array.append(self.data[d][idx])
-            else:
-                array.append(1)
-        return *array, self.labels[idx], self.weights[idx]
+        orderoftensors = ['jet','jetP4','lep','lepP4','VP4','global','category']
+        return *[self.data[d][idx] for d in orderoftensors], self.labels[idx], self.weights[idx]
 
 class GraphAttentionClassifier(nn.Module):
-    def __init__(self, jet_dim=2, lep_dim=2, ll_dim=4, num_heads=4, attention_dim=128, num_classes=2, dropout=0.2, pairwisefeats = 7, hyperembeddim=16, globdim=3, channel="ZLL"):
+    def __init__(self, jet_dim=2, lep_dim=2, ll_dim=4, num_heads=4, attention_dim=128, cat_embed_dim=2, num_classes=2, globdim=4, dropout=0.2, pairwisefeats = 7, hyperembeddim=16):
         super(GraphAttentionClassifier, self).__init__()
-        self.channel = channel
         self.num_heads = num_heads
         self.pairwisefeats = pairwisefeats
 
-        self.embedjets = nn.Linear(jet_dim+4, hyperembeddim)
+        self.embedjets = nn.Linear(jet_dim+4+cat_embed_dim, hyperembeddim)
         self.multihead_attention_jet = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
 
-        self.edgejet = nn.Linear(pairwisefeats, hyperembeddim)
+        self.edgejet = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
         self.conv1d_edgejet = nn.Conv1d(in_channels=pairwisefeats, out_channels=1, kernel_size=1)
         self.multihead_attention_edgejet = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)        
         self.edgejetbn = nn.BatchNorm1d(1)
 
-        if channel=="ZLL" or channel=="WLNu":
-            self.embedleps = nn.Linear(lep_dim+4, hyperembeddim)
-            self.multihead_attention_lep = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
-
-        if channel=="ZLL":
-            self.edgelep = nn.Linear(pairwisefeats, hyperembeddim)
-            self.multihead_attention_edgelep = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)     
-
-        if channel=="ZNuNu":
-            self.embedll = nn.Linear(ll_dim, hyperembeddim)     
         
-        if channel=="ZLL" or channel=="WLNu":
-            self.embedjl = nn.Linear(pairwisefeats, hyperembeddim)
-            self.multihead_attention_jl = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
-            self.embedjjl = nn.Linear(pairwisefeats, hyperembeddim)
-            self.multihead_attention_jjl = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
+        self.embedleps = nn.Linear(lep_dim+4+cat_embed_dim, hyperembeddim)
+        self.multihead_attention_lep = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
 
-        self.embedjll = nn.Linear(pairwisefeats, hyperembeddim)
+        self.edgelep = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
+        self.multihead_attention_edgelep = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)     
+
+        self.embedll = nn.Linear(ll_dim+cat_embed_dim, hyperembeddim)     
+        
+        self.embedjl = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
+        self.multihead_attention_jl = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
+        self.embedjjl = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
+        self.multihead_attention_jjl = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
+
+        self.embedjll = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
         self.multihead_attention_jll = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
-        self.embedjjll = nn.Linear(pairwisefeats, hyperembeddim)
+        self.embedjjll = nn.Linear(pairwisefeats+cat_embed_dim, hyperembeddim)
         self.multihead_attention_jjll = nn.MultiheadAttention(embed_dim=hyperembeddim, num_heads=num_heads, batch_first=True)
 
-        self.embedglob = nn.Linear(globdim, hyperembeddim)
+        self.embedglob = nn.Linear(globdim+cat_embed_dim, hyperembeddim)
 
         self.layer_norm = nn.LayerNorm(hyperembeddim)
 
-        catdim = 2
-        if channel=="ZLL":
-            nmha = 9
-        elif channel=="WLNu":
-            nmha = 8
-        elif channel=="ZNuNu":
-            nmha = 6
-            catdim = 0
+        catlen = 2+3+4
+        self.embedcat = nn.Linear(catlen, cat_embed_dim)
 
-        self.fc1 = nn.Linear(hyperembeddim*nmha+catdim, attention_dim)
+        self.fc1 = nn.Linear(hyperembeddim*10+catlen, attention_dim)
         self.bn1 = nn.BatchNorm1d(attention_dim)
-        self.fc2 = nn.Linear(attention_dim, attention_dim)
+        self.fc2 = nn.Linear(attention_dim+catlen, attention_dim)
         self.bn2 = nn.BatchNorm1d(attention_dim)
-        self.fc3 = nn.Linear(attention_dim, num_classes)
+        self.fc3 = nn.Linear(attention_dim+catlen, attention_dim)
+        self.bn3 = nn.BatchNorm1d(attention_dim)
+        self.fc4 = nn.Linear(attention_dim+catlen, num_classes)
 
         self.dropout = nn.Dropout(dropout)
     
@@ -297,9 +283,12 @@ class GraphAttentionClassifier(nn.Module):
         return tensor[:, indices[0], indices[1], :]
         
 
-    def pairprocess(self,p4_1,p4_2,embed,mha=None,pool=True):
+    def pairprocess(self,p4_1,p4_2,embed,mha=None,pool=True,catembed=None):
         ij, _ = self.pairwise_interaction(p4_1,p4_2)
         ij = ij.reshape(ij.shape[0],ij.shape[1]*ij.shape[2],ij.shape[3])
+        if catembed is not None:
+            catinput = catembed.unsqueeze(1).expand(-1, ij.shape[1], -1)
+            ij = torch.cat([ij,catinput],dim=2)
         ij_embed = embed(ij)
         if mha is not None:
             ij_embed, _ = mha(ij_embed,ij_embed,ij_embed)
@@ -310,6 +299,20 @@ class GraphAttentionClassifier(nn.Module):
         return ij_embed
 
     def forward(self, jet, jetp4, lep, lepp4, ll, glo, cat):
+        #categorical
+        lepcat = F.one_hot(cat[:,0],num_classes=2).float()
+        channelcat = F.one_hot(cat[:,1],num_classes=3).float()
+        eracat = F.one_hot(cat[:,2],num_classes=4).float()
+
+        #categorical
+        if len(lepcat.shape) == 1:          #This happens when batchsize is 1
+            lepcat = lepcat.unsqueeze(0)
+            channelcat = lepcat.unsqueeze(0)
+            eracat = lepcat.unsqueeze(0)
+
+        catconc = torch.cat([lepcat,channelcat,eracat], dim=1)
+        cat_embed = self.embedcat(catconc)
+
         # Jets
         jet_edge_features, dijetP4 = self.selfinteraction(jetp4)            # BxNxNxF
         nnodes = jet_edge_features.shape[1]
@@ -324,8 +327,9 @@ class GraphAttentionClassifier(nn.Module):
         jetmask = torch.all(jet == 0, dim=-1)
         edgemask = jetmask.unsqueeze(1) | jetmask.unsqueeze(2)
         # edgemask = edgemask.view(edgemask.shape[0],edgemask.shape[1]*edgemask.shape[2])     #BxN^2
-
-        jet = torch.cat([jet,jetp4],dim=2)
+        
+        catinput = cat_embed.unsqueeze(1).expand(-1, jet.shape[1], -1)
+        jet = torch.cat([jet,jetp4,catinput],dim=2)
         jet = self.embedjets(jet)
         attn_output_jet, _ = self.multihead_attention_jet(jet, jet, jet, key_padding_mask=jetmask.float(), attn_mask=e_attn)
         attn_output_jet = self.layer_norm(attn_output_jet)
@@ -334,66 +338,54 @@ class GraphAttentionClassifier(nn.Module):
         
         jet_edge_features = self.makeUT(jet_edge_features)
         edgemask = self.makeUT(edgemask)
-        e = self.edgejet(jet_edge_features)
+        catinput = cat_embed.unsqueeze(1).expand(-1, jet_edge_features.shape[1], -1)
+        e = self.edgejet(torch.cat([jet_edge_features,catinput],dim=2))
         attn_output_edgejet, _ = self.multihead_attention_edgejet(e, e, e, key_padding_mask=edgemask)
         attn_output_edgejet = self.layer_norm(attn_output_edgejet)        
         pooled_output_edgejet = torch.mean(attn_output_edgejet, dim=1)
 
 
         # Leps
-        if self.channel=="ZLL":
-            lep_edge_features, _ = self.selfinteraction(lepp4)
+        lep_edge_features, _ = self.selfinteraction(lepp4)
         # nnodes = lep_edge_features.shape[1]
         # lep_edge_features_avg = lep_edge_features.view(lep_edge_features.shape[0], nnodes*nnodes, lep_edge_features.shape[3])
 
-        if self.channel=="ZLL" or self.channel=="WLNu": 
-            lep = torch.cat([lep,lepp4],dim=2)
-            lep_emb = self.embedleps(lep)
-            attn_output_lep, _ = self.multihead_attention_lep(lep_emb, lep_emb, lep_emb)
-            attn_output_lep = self.layer_norm(attn_output_lep)
-            pooled_output_leps = torch.sum(attn_output_lep, dim=1)
+        catinput = cat_embed.unsqueeze(1).expand(-1, lep.shape[1], -1)
+        lep = torch.cat([lep,lepp4,catinput],dim=2)
+        lep_emb = self.embedleps(lep)
+        attn_output_lep, _ = self.multihead_attention_lep(lep_emb, lep_emb, lep_emb)
+        attn_output_lep = self.layer_norm(attn_output_lep)
+        pooled_output_leps = torch.sum(attn_output_lep, dim=1)
 
-        if self.channel=="ZLL":
-            lep_edge_features = self.makeUT(lep_edge_features)
-            e = self.edgelep(lep_edge_features)
-            attn_output_edgelep, _ = self.multihead_attention_edgelep(e, e, e)
-            attn_output_edgelep = self.layer_norm(attn_output_edgelep)        
-            pooled_output_edgelep = torch.mean(attn_output_edgelep, dim=1)
 
-        if self.channel=="ZNuNu":
-            # ll
-            ll_emb = self.embedll(ll)
+        lep_edge_features = self.makeUT(lep_edge_features)
+        catinput = cat_embed.unsqueeze(1).expand(-1, lep_edge_features.shape[1], -1)
+        e = self.edgelep(torch.cat([lep_edge_features,catinput],dim=2))
+        attn_output_edgelep, _ = self.multihead_attention_edgelep(e, e, e)
+        attn_output_edgelep = self.layer_norm(attn_output_edgelep)        
+        pooled_output_edgelep = torch.mean(attn_output_edgelep, dim=1)
+
+        # ll; particularly important for 0L channel
+        ll_emb = self.embedll(torch.cat([ll,cat_embed],dim=1))
 
         jjp4 = self.makeUT(dijetP4)
-        if self.channel=="ZLL" or self.channel=="WLNu": 
-            #jet with lep interactions
-            jl_out = self.pairprocess(jetp4,lepp4,self.embedjl,self.multihead_attention_jl)
+        #jet with lep interactions
+        jl_out = self.pairprocess(jetp4,lepp4,self.embedjl,self.multihead_attention_jl,catembed=cat_embed)
 
-            # jj with lep interactions            
-            jjl_out = self.pairprocess(jjp4,lepp4,self.embedjjl,self.multihead_attention_jjl)
+        # jj with lep interactions            
+        jjl_out = self.pairprocess(jjp4,lepp4,self.embedjjl,self.multihead_attention_jjl,catembed=cat_embed)
 
         # j with ll interactions
         ll = ll.unsqueeze(1)
-        jll_out = self.pairprocess(jetp4,ll,self.embedjll,self.multihead_attention_jll)
+        jll_out = self.pairprocess(jetp4,ll,self.embedjll,self.multihead_attention_jll,catembed=cat_embed)
 
         # jj with ll interactions
-        jjll_out = self.pairprocess(jjp4,ll,self.embedjjll,self.multihead_attention_jjll)
+        jjll_out = self.pairprocess(jjp4,ll,self.embedjjll,self.multihead_attention_jjll,catembed=cat_embed)
 
         #global
-        global_out = self.embedglob(glo)
+        global_out = self.embedglob(torch.cat([glo,cat_embed],dim=1))
 
-        #categorical
-        category_emb = F.one_hot(cat.squeeze(),num_classes=2)
-        if len(category_emb.shape) == 1:          #This happens when batchsize is 1
-            category_emb = category_emb.unsqueeze(0)
-
-        if self.channel=="ZLL":
-            mhalist = [pooled_output_jets,pooled_output_edgejet,pooled_output_leps,pooled_output_edgelep,jl_out,jjl_out,jll_out,jjll_out,global_out,category_emb]
-        elif self.channel=="WLNu":
-            mhalist = [pooled_output_jets,pooled_output_edgejet,pooled_output_leps,jl_out,jjl_out,jll_out,jjll_out,global_out,category_emb]
-        elif self.channel=="ZNuNu":
-            mhalist = [pooled_output_jets,pooled_output_edgejet,ll_emb,jll_out,jjll_out,global_out]
-
+        mhalist = [pooled_output_jets,pooled_output_edgejet,pooled_output_leps,pooled_output_edgelep,ll_emb,jl_out,jjl_out,jll_out,jjll_out,global_out,catconc]
         allout = torch.cat(mhalist,dim=1)
 
         # Feedforward neural network
@@ -402,10 +394,19 @@ class GraphAttentionClassifier(nn.Module):
         x = F.relu(x)
         x = self.dropout(x)
 
+        x = torch.cat([x,catconc],dim=1)
         x = self.fc2(x)
         x = self.bn2(x)
         x = F.relu(x)
+        x = self.dropout(x)
+
+        x = torch.cat([x,catconc],dim=1)
         x = self.fc3(x)
+        x = self.bn3(x)
+        x = F.relu(x)
+
+        x = torch.cat([x,catconc],dim=1)
+        x = self.fc4(x)
         
         return torch.sigmoid(x)
 
@@ -414,7 +415,7 @@ def getinputs(data,device):
     jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = jet.to(device),jetp4.to(device),lep.to(device),lepp4.to(device),llp4.to(device),glo.to(device),cat.to(device),label.to(device),weight.to(device)
     return jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight
 
-def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsampling=False, trial=None, ngpu=1, cpulist=None, loadmodel=None, channel="WLNu",globdim=4):
+def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsampling=False, trial=None, ngpu=1, cpulist=None, loadmodel=None):
     from training import evaluate_model
     outhandle = outhandler(outdir)
     outhandle.addcustom("signweighted")
@@ -422,15 +423,14 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
 
     if trial is not None:
         lr = trial.suggest_float('lr', 5e-3, 1e-2)
-        dropout = trial.suggest_float('dropout', 0.1, 0.3)
-        attention_dim = trial.suggest_int('attn_dim', 32, 128, step=16)
-        hyperembeddim = trial.suggest_int('hyper_dim', 8, 32, step=4)
+        dropout = 0 #trial.suggest_float('dropout', 0., 0.1)
+        attention_dim = trial.suggest_int('attn_dim', 128, 512, step=64)
+        hyperembeddim = trial.suggest_int('hyper_dim', 16, 48, step=8)
 
         if not torch.cuda.is_available():
             raise NotImplementedError("Hyperparameter optimization expects GPU availability.")
 
         if ngpu > 1:
-            # The following is experimental when you run jobs in parallel using n_jobs in optuna
             gpu_id = trial.number % ngpu  # ngpu GPUs, alternate between GPU 0 and GPU 1
             device = torch.device(f"cuda:{gpu_id}") # Set the GPU for this trial
             print(f"Optuna trial number {trial.number}, using device cuda:{gpu_id}")
@@ -445,10 +445,10 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
             print(f"Optuna trial number {trial.number}, using cpus:",cputouse)
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        lr = outhandle.getenv("LR",0.00776)
-        dropout = outhandle.getenv("DROPOUT",0.371)
-        attention_dim = int(outhandle.getenv("ATTENTION",48))        
-        hyperembeddim = int(outhandle.getenv("DIM",8))
+        lr = outhandle.getenv("LR",0.007)
+        dropout = outhandle.getenv("DROPOUT",0.)
+        attention_dim = int(outhandle.getenv("ATTENTION",512))        
+        hyperembeddim = int(outhandle.getenv("DIM",48))
     # if test:
     print("Device:", device)
 
@@ -464,29 +464,12 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
         nloaders = os.cpu_count()
     else:
         nloaders = ncpu
-    nepochs = 1000
-    
 
-    print(f"Will use {nloaders} cpus for dataloaders.")
-
-    modelparams = {"attention_dim": attention_dim, "hyperembeddim": hyperembeddim, "dropout": dropout, "channel": channel, "globdim": globdim}
-    print("Model parameters:",modelparams)
-    model = GraphAttentionClassifier(**modelparams).to(device)
-
-    modelsize = count_parameters(model)
-    print("Using model of size:",modelsize)
-    
-    # if torch.cuda.device_count() > 1:
-    #     print(f"Will use {torch.cuda.device_count()} GPUs.")
-    #     model = nn.DataParallel(model)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.7, patience = 15)
-
-    if weightedsampling:
-        criterion = nn.BCELoss()
-    else:
-        criterion = nn.BCELoss(reduction="none")
+    nepochs = 200
+    schedulerpatience = 5
+    decayrate = 0.7
+    earlystop = 20
+    reportevery = 1
 
     batch_size = 1024*64
     val_batch_size = 1024*32
@@ -494,6 +477,39 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
         batch_size = 16
         val_batch_size = 16
     
+
+    print(f"Will use {nloaders} cpus for dataloaders.")
+
+    if loadmodel is None:
+        modelparams = {"attention_dim": attention_dim, "hyperembeddim": hyperembeddim, "dropout": dropout}        
+    else:
+        modeldir = '/'.join(loadmodel.split('/')[:-1])
+        modelparams = pickle.load(open(f'{modeldir}/modelparams.pkl','rb'))
+        print("Loaded saved model parameters.")
+
+    print("Model parameters:",modelparams)
+    model = GraphAttentionClassifier(**modelparams).to(device)
+
+    modelsize = count_parameters(model)
+    print("Using model of size:",modelsize)
+    
+    '''
+    TODO: Currently multi-GPU training does not work; it requires memory-contiguous tensors and fails in the makeUT function:
+    line 283, in makeUT
+    return tensor[:, indices[0], indices[1], :]
+    RuntimeError: CUDA error: misaligned address
+    '''
+    # if torch.cuda.device_count() > 1:
+    #     print(f"Will use {torch.cuda.device_count()} GPUs.")
+    #     model = nn.DataParallel(model)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=decayrate, patience = schedulerpatience)
+
+    if weightedsampling:
+        criterion = nn.BCELoss()
+    else:
+        criterion = nn.BCELoss(reduction="none")
 
     if e is not None:
         print("Splitting events by even and odd.")
@@ -531,8 +547,6 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
     if train_size/modelsize < 10:
         print(f"WARNING: Training data size={train_size} is less than 10 times the modelsize={modelsize}!!!")
 
-    earlystop = 80
-    reportevery = 20
     bestloss = 1e9
     bestepoch = 0
     bestmodel = None
@@ -541,9 +555,6 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
     bestlosses = []
     lrs = []
 
-    # loadmodel = "Models/ZH_Hto2C_Zto2L_2022_preEE_vs_DY/gnn_signweighted_hyperparameter_LR0.009858527825317508_dropout0.2830622619831955_attn32_emb8/gnn.pt"
-    # loadmodel = "Models/2022postEE/ZH_Hto2C_Zto2L_2022_postEE_vs_DY/gnn_signweighted_hyperparameter_LR0.0061251908812319416_dropout0.14118631235525558_attn48_emb8/gnn.pt"
-
     print("Using batch size",batch_size)
     
 
@@ -551,31 +562,18 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
         outdir = outhandle.outdir
         print("Working dir:", outdir)   
         os.system(f"mkdir -p {outdir}/checkpoints")
-        with alive_bar(nepochs,title="Epoch") if trial is None else nullcontext() as epochbar:
+
+        pickle.dump(modelparams,open(f"{outdir}/modelparams.pkl",'wb'))
+
+        with nullcontext() as epochbar:
             for iepoch in range(nepochs):
                 model.train()
                 total_loss = 0.
-                for data in train_loader:
-                    jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
+                with alive_bar(len(train_loader),title=f"Epoch {iepoch} training") if trial is None else nullcontext() as batchbar:
+                    for data in train_loader:
+                        jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
 
-                    optimizer.zero_grad()
-                    outputs = model(jet,jetp4,lep,lepp4,llp4,glo,cat)
-                    if weightedsampling:
-                        loss = criterion(outputs[:,0], label)
-                    else:
-                        loss = criterion(outputs[:,0], label)*weight
-                        loss = loss.mean()
-
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 10.) 
-                    optimizer.step()
-                    total_loss += loss.item()
-
-                model.eval()
-                val_loss = 0.
-                for data in val_loader:
-                    jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
-                    with torch.no_grad():
+                        optimizer.zero_grad()
                         outputs = model(jet,jetp4,lep,lepp4,llp4,glo,cat)
                         if weightedsampling:
                             loss = criterion(outputs[:,0], label)
@@ -583,7 +581,29 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
                             loss = criterion(outputs[:,0], label)*weight
                             loss = loss.mean()
 
-                        val_loss += loss.item()
+                        loss.backward()
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.) 
+                        optimizer.step()
+                        total_loss += loss.item()
+
+                        if trial is None: batchbar()
+
+                model.eval()
+                val_loss = 0.
+                with alive_bar(len(val_loader),title=f"Epoch {iepoch} validating") if trial is None else nullcontext() as batchbar:
+                    for data in val_loader:
+                        jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
+                        with torch.no_grad():
+                            outputs = model(jet,jetp4,lep,lepp4,llp4,glo,cat)
+                            if weightedsampling:
+                                loss = criterion(outputs[:,0], label)
+                            else:
+                                loss = criterion(outputs[:,0], label)*weight
+                                loss = loss.mean()
+
+                            val_loss += loss.item()
+
+                        if trial is None: batchbar()
 
                 avg_train_loss = total_loss / len(train_loader)
                 avg_val_loss = val_loss / len(val_loader)
@@ -620,14 +640,14 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
                     print(f"Loss did not improve in {earlystop} epochs. Exiting.")
                     break
 
-                if trial is None:
-                    epochbar.text(status)
-                    epochbar()
+                # if trial is None:
+                #     epochbar.text(status)
+                #     epochbar()
 
         print(status)
 
         torch.save(bestmodel,f"{outdir}/gnn.pt")
-        pickle.dump(modelparams,open(f"{outdir}/modelparams.pkl",'wb'))
+        print("Model saved:",f"{outdir}/gnn.pt")
         dumploss(trainlosses,bestlosses,f"{outdir}/losses.png",lrcurve=lrs,valloss=vallosses)
 
         model.load_state_dict(bestmodel)
@@ -648,19 +668,25 @@ def runGNNtraining(tensordict, y, outdir, test=False, w=None, e=None, weightedsa
     allouts = []
     truth = []
     wts = []
-    for data in val_loader:
-        jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
-        with torch.no_grad():
-            outputs = model(jet,jetp4,lep,lepp4,llp4,glo,cat)
-            allouts.append(outputs[:,0])
-            truth.append(label)
-            wts.append(weight)
-    out = torch.cat(allouts,dim=0).cpu()
-    yvals = torch.cat(truth,dim=0).cpu()
-    ywts = torch.cat(wts,dim=0).cpu()
-    # return out,yvals,ywts,outdir
 
-    auc = evaluate_model(None, None, yvals, None, "", 'gnn', input_y_pred=out, input_y_wts=ywts, plot_dir=f"{outdir}/Plots")
+    for ch in [0,1,2]:
+        for era in [0,1]:
+            val_indices = ((e % 2 == 1) & (graph.data["category"][:,1]==ch) & (graph.data["category"][:,2]==era)).nonzero(as_tuple=True)[0]
+            val_subset = Subset(graph, val_indices)    
+            val_loader = DataLoader(val_subset, batch_size=val_batch_size, shuffle=False, num_workers=nloaders, pin_memory=True)
+            for data in val_loader:
+                jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight = getinputs(data,device)
+                with torch.no_grad():
+                    outputs = model(jet,jetp4,lep,lepp4,llp4,glo,cat)
+                    allouts.append(outputs[:,0])
+                    truth.append(label)
+                    wts.append(weight)
+            out = torch.cat(allouts,dim=0).cpu()
+            yvals = torch.cat(truth,dim=0).cpu()
+            ywts = torch.cat(wts,dim=0).cpu()
+            # return out,yvals,ywts,outdir
+
+            auc = evaluate_model(yvals, input_y_pred=out, input_y_wts=ywts, plot_dir=f"{outdir}/Plots",suff=f"ch{ch}_era{era}")
 
     if trial is not None:
         del model,jet,jetp4,lep,lepp4,llp4,glo,cat,label,weight

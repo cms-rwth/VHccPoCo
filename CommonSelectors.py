@@ -68,21 +68,21 @@ def OneLeptonPlusMet(events, params, **kwargs):
     #mask = (events.nLeptonGood == 1 )
     mask = ( (events.nLeptonGood == 1 )
              & (ak.firsts(events.LeptonGood.pt) > params["pt_lep"])
-             & (events.MET.pt > params["pt_met"])
+             & (events.PuppiMET.pt > params["pt_met"])
             )
     return ak.where(ak.is_none(mask), False, mask)
 
 def LepMetTwoJets(events, params, **kwargs):
     mask = ( (events.nLeptonGood == 1 )
              & (ak.firsts(events.LeptonGood.pt) > params["pt_lep"])
-             & (events.MET.pt > params["pt_met"])
+             & (events.PuppiMET.pt > params["pt_met"])
              & (events.nJetGood >= 2)
             )
     return ak.where(ak.is_none(mask), False, mask)
 
 def MetTwoJetsNoLep(events, params, **kwargs):    
     mask = ( (events.nLeptonGood == 0 )
-             & (events.MET.pt > params["pt_met"])
+             & (events.PuppiMET.pt > params["pt_met"])
              & (events.nJetGood >= 2)
              & (ak.firsts(events.JetGood.pt) > params["pt_jet1"])
              & (ak.pad_none(events.JetGood.pt, 2, axis=1)[:,1] > params["pt_jet2"])
@@ -95,11 +95,11 @@ def WLNuTwoJets(events, params, **kwargs):
         raise Exception("The lepton flavor is not supported")
 
     fields = {
-        "pt": events.MET.pt,
-        "eta": ak.zeros_like(events.MET.pt),
-        "phi": events.MET.phi,
-        "mass": ak.zeros_like(events.MET.pt),
-        "charge": ak.zeros_like(events.MET.pt),
+        "pt": events.PuppiMET.pt,
+        "eta": ak.zeros_like(events.PuppiMET.pt),
+        "phi": events.PuppiMET.phi,
+        "mass": ak.zeros_like(events.PuppiMET.pt),
+        "charge": ak.zeros_like(events.PuppiMET.pt),
     }
 
     METs = ak.zip(fields, with_name="PtEtaPhiMCandidate")
