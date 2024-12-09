@@ -6,3 +6,4 @@ cores-per-worker: 1
 mem-per-worker: "3GB"
 disk-per-worker: "3GB"
 local-virtualenv: true
+skip-bad-files: true

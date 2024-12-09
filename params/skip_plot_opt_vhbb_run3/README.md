@@ -21,7 +21,7 @@ python -m venv --system-site-packages myPocket
 source myPocket/bin/activate
 pip install -e .[dev]
 
-pip install lightgbm tensorflow
+pip install lightgbm tensorflow==2.12.0
 pip install setuptools==70.*
 ```
 
@@ -58,10 +58,19 @@ source myPocket/bin/activate
     runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_all 2>&1 | tee dask_out.log &
 
     ```
+    
+    **you** can now try the new job submission on condor, if you are wasting time with dask failure of random files. Give it a try with `-e condor@lxplus --max-events-per-job N --dry-run`
+    
 
 5. Make some plots:
    ```
    cd output_vhbb_zll_dev_all
    make-plots -i output_all.coffea --cfg parameters_dump.yaml -o plots -op ../VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_plot_options_vhbb_ZLL.yaml
    ```
+   
+6. produce datacards:
+     ```
+     python VHccPoCo/scripts/convertToRoot.py path/to/your/output/output_all.coffea -c VHccPoCo/params/shapemaker_vhbb_run3/Zll_Shape.yaml
+     ```
+     
 ---

@@ -5,7 +5,7 @@ import uproot
 import pandas as pd
 import math
 import warnings
-import os
+import os, pickle
 import lightgbm as lgb
 # import tensorflow as tf
 import gc
@@ -13,6 +13,12 @@ import gc
 # from keras.layers import Dense
 # from keras.callbacks import EarlyStopping
 # from keras.models import load_model
+
+# import inspect
+
+# import torch
+# from MVA.gnnmodels import GraphAttentionClassifier
+
 import CommonSelectors
 from CommonSelectors import *
 from pocket_coffea.utils.utils import dump_ak_array
@@ -274,10 +280,10 @@ class VHbbBaseProcessor(BaseProcessorABC):
 
 
     def evaluateBDT(self, data):
-        print(self.params.Models.BDT[self.channel][self.events.metadata["year"]].model_file)
+        print(self.params.Models_Hbb.BDT[self.channel][self.events.metadata["year"]].model_file)
         print()
         # Read the model file
-        model = lgb.Booster(model_file=self.params.Models.BDT[self.channel][self.events.metadata["year"]].model_file)
+        model = lgb.Booster(model_file=self.params.Models_Hbb.BDT[self.channel][self.events.metadata["year"]].model_file)
         #bdt_score = self.bdt_model.predict(data)
         bdt_score = model.predict(data)
         # Release memory
@@ -378,10 +384,7 @@ class VHbbBaseProcessor(BaseProcessorABC):
         
     # Function that defines common variables employed in analyses and save them as attributes of `events`
     def define_common_variables_before_presel(self, variation):
-        self.events["JetGood_Ht"] = ak.sum(abs(self.events.JetGood.pt), axis=1)
-        
-        self.myJetTagger = self.params.ctagging[self._year]["tagger"]
-        
+                
         self.events["dijet"] = get_dijet(self.events.JetGood)
         self.events["JetsCvsL"] = CvsLsorted(self.events["JetGood"],
                                              tagger = self.params.object_preselection.bJet_algorithm)
@@ -409,7 +412,8 @@ class VHbbBaseProcessor(BaseProcessorABC):
 
     def define_common_variables_after_presel(self, variation):
       
-        odd_event_mask = (self.events.EventNr % 2 == 1)
+        # odd_event_mask = (self.events.EventNr % 2 == 1)
+        all_event_mask = (self.events.EventNr % 1 == 0)
         
         if self._isMC:
             self.events["nGenPart"] = ak.num(self.events.GenPart)
@@ -428,27 +432,27 @@ class VHbbBaseProcessor(BaseProcessorABC):
             #                self.events.GenPart_phi, 
             #                self.events.GenPart_mass)
 
-            self.events["LHE_AlphaS"] = self.events.LHE.AlphaS
-            self.events["LHE_HT"] = self.events.LHE.HT
-            self.events["LHE_HTIncoming"] = self.events.LHE.HTIncoming
-            self.events["LHE_Nb"] = self.events.LHE.Nb
-            self.events["LHE_Nc"] = self.events.LHE.Nc
-            self.events["LHE_Nglu"] = self.events.LHE.Nglu
-            self.events["LHE_Njets"] = self.events.LHE.Njets
-            self.events["LHE_NpLO"] = self.events.LHE.NpLO
-            self.events["LHE_NpNLO"] = self.events.LHE.NpNLO
-            self.events["LHE_Nuds"] = self.events.LHE.Nuds
-            self.events["LHE_Vpt"] = self.events.LHE.Vpt
+#             self.events["LHE_AlphaS"] = self.events.LHE.AlphaS
+#             self.events["LHE_HT"] = self.events.LHE.HT
+#             self.events["LHE_HTIncoming"] = self.events.LHE.HTIncoming
+#             self.events["LHE_Nb"] = self.events.LHE.Nb
+#             self.events["LHE_Nc"] = self.events.LHE.Nc
+#             self.events["LHE_Nglu"] = self.events.LHE.Nglu
+#             self.events["LHE_Njets"] = self.events.LHE.Njets
+#             self.events["LHE_NpLO"] = self.events.LHE.NpLO
+#             self.events["LHE_NpNLO"] = self.events.LHE.NpNLO
+#             self.events["LHE_Nuds"] = self.events.LHE.Nuds
+#             self.events["LHE_Vpt"] = self.events.LHE.Vpt
 
-            self.events["LHEPart_eta"] = self.events.LHEPart.eta
-            self.events["LHEPart_incomingpz"] = self.events.LHEPart.incomingpz
-            self.events["LHEPart_mass"] = self.events.LHEPart.mass
-            self.events["LHEPart_pdgId"] = self.events.LHEPart.pdgId
-            self.events["LHEPart_phi"] = self.events.LHEPart.phi
-            self.events["LHEPart_pt"] = self.events.LHEPart.pt
-            self.events["LHEPart_spin"] = self.events.LHEPart.spin
-            self.events["LHEPart_status"] = self.events.LHEPart.status
-            self.events["nLHEPart"] = ak.num(self.events.LHEPart)
+#             self.events["LHEPart_eta"] = self.events.LHEPart.eta
+#             self.events["LHEPart_incomingpz"] = self.events.LHEPart.incomingpz
+#             self.events["LHEPart_mass"] = self.events.LHEPart.mass
+#             self.events["LHEPart_pdgId"] = self.events.LHEPart.pdgId
+#             self.events["LHEPart_phi"] = self.events.LHEPart.phi
+#             self.events["LHEPart_pt"] = self.events.LHEPart.pt
+#             self.events["LHEPart_spin"] = self.events.LHEPart.spin
+#             self.events["LHEPart_status"] = self.events.LHEPart.status
+#             self.events["nLHEPart"] = ak.num(self.events.LHEPart)
                 
         if self.proc_type=="ZLL":
 
@@ -510,7 +514,7 @@ class VHbbBaseProcessor(BaseProcessorABC):
             self.events["VHbb_deltaR"] = self.events.ZHbb_deltaR
             
             if self.run_bdt:
-                odd_events = self.events[odd_event_mask]
+                odd_events = self.events[all_event_mask]
                 # Create a record of variables to be dumped as root/parquete file:
                 variables_to_process = ak.zip({
                     "events_dilep_m": odd_events["dilep_m"],
@@ -537,8 +541,6 @@ class VHbbBaseProcessor(BaseProcessorABC):
                 })
 
                 df = ak.to_pandas(variables_to_process)
-                columns_to_exclude = ['dibjet_m']
-                df = df.drop(columns=columns_to_exclude, errors='ignore')
                 self.channel = "2L"
                 if not self.params.separate_models: 
                     df_final = df.reindex(range(len(self.events)), fill_value=np.nan)
@@ -658,37 +660,21 @@ class VHbbBaseProcessor(BaseProcessorABC):
             self.events["top_candidate"] = self.events.lead_lep + self.events.lead_b + self.events.neutrino_from_W
             self.events["top_mass"] = (self.events.lead_lep + self.events.lead_b + self.events.neutrino_from_W).mass
             
-            if self.run_dnn:
-                odd_events = self.events[odd_event_mask]
+            if self.run_bdt:
+                odd_events = self.events[all_event_mask]
                 # Create a record of variables to be dumped as root/parquete file:
                 variables_to_process = ak.zip({
-                    "dijet_m": self.events["dijet_m"],
-                    "dijet_pt": self.events["dijet_pt"],
-                    "dijet_dr": self.events["dijet_dr"],
-                    "dijet_deltaPhi": self.events["dijet_deltaPhi"],
-                    "dijet_deltaEta": self.events["dijet_deltaEta"],
-                    "dijet_CvsL_max": self.events["dijet_CvsL_max"],
-                    "dijet_CvsL_min": self.events["dijet_CvsL_min"],
-                    "dijet_CvsB_max": self.events["dijet_CvsB_max"],
-                    "dijet_CvsB_min": self.events["dijet_CvsB_min"],
-                    "dijet_pt_max": self.events["dijet_pt_max"],
-                    "dijet_pt_min": self.events["dijet_pt_min"],
                     "W_mt": self.events["W_mt"],
                     "W_pt": self.events["W_pt"],
                     "pt_miss": self.events["pt_miss"],
                     "WH_deltaPhi": self.events["WH_deltaPhi"],
                     "deltaPhi_l1_j1": self.events["deltaPhi_l1_j1"],
                     "deltaPhi_l1_MET": self.events["deltaPhi_l1_MET"],
-                    "deltaPhi_l1_b": self.events["deltaPhi_l1_b"],
-                    "deltaEta_l1_b": self.events["deltaEta_l1_b"],
-                    "deltaR_l1_b": self.events["deltaR_l1_b"],
-                    "b_CvsL": self.events["b_CvsL"],
-                    "b_CvsB": self.events["b_CvsB"],
-                    "b_Btag": self.events["b_Btag"],
                     "top_mass": self.events["top_mass"]
                 })
             
                 df = ak.to_pandas(variables_to_process)
+                columns_to_exclude = ['dibjet_m']
                 df = df.drop(columns=columns_to_exclude, errors='ignore')
                 self.channel = "1L"
                 if not self.params.separate_models: 
@@ -722,6 +708,8 @@ class VHbbBaseProcessor(BaseProcessorABC):
             ### General
             self.events["Z_candidate"] = self.events.MET_used
             self.events["Z_pt"] = self.events.Z_candidate.pt
+            self.events["Z_eta"] = self.events.Z_candidate.eta
+            self.events["Z_phi"] = self.events.Z_candidate.phi
             
             self.events["dijet_m"] = self.events.dijet_csort.mass
             self.events["dijet_pt"] = self.events.dijet_csort.pt
@@ -762,8 +750,8 @@ class VHbbBaseProcessor(BaseProcessorABC):
             self.events["deltaPhi_jet1_MET"] = np.abs(self.events.MET.delta_phi(self.events.JetsBvsL[:,0]))
             self.events["deltaPhi_jet2_MET"] = np.abs(self.events.MET.delta_phi(self.events.JetsBvsL[:,1]))
             
-            if self.run_dnn:
-                odd_events = self.events[odd_event_mask]
+            if self.run_bdt:
+                odd_events = self.events[all_event_mask]
                 # Create a record of variables to be dumped as root/parquete file:
                 variables_to_process = ak.zip({
                     "dijet_m": self.events["dijet_m"],

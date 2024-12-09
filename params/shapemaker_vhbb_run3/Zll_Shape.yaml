@@ -1,37 +1,106 @@
 input:
   channel: "2L"
-  eras: ["2022_preEE"]
-  variation: "nominal"
+  # eras: ["2022_preEE", "2022_postEE"]
+  eras: ["2022_postEE"]
+  variations: ["nominal", "pileupUp", "pileupDown"]
 
 output:
   shapes_file_name: "vhbb_shapes"
-  
+
 config:
-  example_variable: "dijet_m"
+  example_variable: "nBJets"
   example_data: "DATA_DoubleMuon"
   example_MC: "ZH_Hto2B_Zto2L"
   example_subsample: "DYJetsToLL_FxFx__DiJet_bx"
-  example_category: "SR_2L2B"
-    
+  example_category: "SR_2L2B_ll"
+
 categories:
-  SR_2L2B:
-    observable: "dijet_m"
-    mata_name: "Zll_SR"
+  SR_2L2B_ll:
+    observable: "nBJets"
+    new_name: "Zll_SR"
+#   SR_2L2B_ee:
+#     observable: "nBJets"
+#     new_name: "Zee_SR"
+#   SR_2L2B_mm:
+#     observable: "nBJets"
+#     new_name: "Zmm_SR"
+    
+#   CR_LF_ll:
+#     observable: "dibjet_m"
+#     new_name: "Zll_CR_LF"
+#   CR_LF_ee:
+#     observable: "dibjet_m"
+#     new_name: "Zee_CR_LF"
+#   CR_LF_mm:
+#     observable: "dibjet_m"
+#     new_name: "Zmm_CR_LF"
+    
+#   CR_B_ll:
+#     observable: "dibjet_m"
+#     new_name: "Zll_CR_B"
+#   CR_B_ee:
+#     observable: "dibjet_m"
+#     new_name: "Zee_CR_B"
+#   CR_B_mm:
+#     observable: "dibjet_m"
+#     new_name: "Zmm_CR_B"
+    
+#   CR_BB_ll:
+#     observable: "dibjet_m"
+#     new_name: "Zll_CR_BB"
+#   CR_BB_ee:
+#     observable: "dibjet_m"
+#     new_name: "Zee_CR_BB"
+#   CR_BB_mm:
+#     observable: "dibjet_m"
+#     new_name: "Zmm_CR_BB"
+    
+#   CR_TT_ll:
+#     observable: "dilep_pt"
+#     new_name: "Zll_CR_TT"
+#   CR_TT_ee:
+#     observable: "dilep_pt"
+#     new_name: "Zee_CR_TT"
+#   CR_TT_mm:
+#     observable: "dilep_pt"
+#     new_name: "Zmm_CR_TT"
     
 sample_to_process_map:
-  DATA_EGamma: "data_obs"
-  DATA_DoubleMuon: "data_obs"
-  ZH_Hto2C_Zto2L: "ZH_hcc"
+  DATA_EGamma: "data_obs_egamma"
+  DATA_DoubleMuon: "data_obs_doublemuon"
+  # ZH_Hto2C_Zto2L: "ZH_hcc"
   ZH_Hto2B_Zto2L: "ZH_hbb"
-  ggZH_Hto2C_Zto2L: "ggZH_hcc"
+  # ggZH_Hto2C_Zto2L: "ggZH_hcc"
   ggZH_Hto2B_Zto2L: "ggZH_hbb"
-  TTTo2L2Nu: "TT"
-  DYJetsToLL_FxFx: "Zj_ll"
+  TTTo2L2Nu: "TTTo2L2Nu"
+  DYJetsToLL_FxFx: "Zj_inc"
   DYJetsToLL_FxFx__DiJet_ll: "Zj_ll"
   DYJetsToLL_FxFx__DiJet_cx: "Zj_cj"
   DYJetsToLL_FxFx__DiJet_bx: "Zj_bj"
   WW: "WW"
   WZ: "WZ"
   ZZ: "ZZ"
+  SingleTop: "SingleTop"
   
+sample_to_merge_list:
+  VV: ["WW", "WZ", "ZZ"]
+  TT: ["TTTo2L2Nu", "TTToSemiLeptonic", "TTToHadrons"]
+  ST: ["SingleTop"]
+  VJet: ["DYJetsToLL_FxFx__DiJet_ll", "DYJetsToLL_FxFx__DiJet_cx", "DYJetsToLL_FxFx__DiJet_bx"]
+  data_obs: ["DATA_EGamma", "DATA_DoubleMuon"]
   
+plotting:
+  enable: True
+  signal_scaling: 50
+  blinding:
+    SR_2L2B_ll:
+      # BDT: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit
+      # BDT_coarse: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit
+      
+#     SR_2L2B_ee:
+#       BDT: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit
+#       BDT_coarse: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit
+
+#     SR_2L2B_mm:
+#       BDT: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit
+#       BDT_coarse: ["0.7", "1.0"]  # Blind region BDT > 0.5, None indicates no upper limit

@@ -1,9 +1,11 @@
 plotting_style:
   samples_groups:
-    # Top:
-    #   - TTToSemiLeptonic
-    #   - TTTo2L2Nu
-    #   - TTToHadrons
+    Top:
+      - TTToSemiLeptonic
+      - TTTo2L2Nu
+      - TTToHadrons
+      - SingleTop
+      
     VV:
       - WW
       - WZ
@@ -28,7 +30,7 @@ plotting_style:
 
   signal_samples:
     ZH_Hto2B_Zto2L: 50
-    ZH_Hto2C_Zto2L: 50
+    # ZH_Hto2C_Zto2L: 50
       
   labels_mc:
     
@@ -65,8 +67,8 @@ plotting_style:
     categories: [SR_2L2B]
     histograms:
       dibjet_m: [90, 150]
-      BDT: [0.7, 1]
-      DNN: [0.7, 1]
+      BDT_coarse: [0.7, 1]
+      DNN_coarse: [0.7, 1]
 
   opts_sig:
     histtype: "step"

@@ -2,20 +2,28 @@
 cd VHccPoCo
 
 build-datasets --cfg samples_Run3.json -o -rs 'T[123]_(FR|IT|BE|CH|US)_\w+' -ir # or
-build-datasets --cfg samples_Run3.json -o -rs 'T[2]_(CH)_\w+' -ir
+build-datasets --cfg samples_Run3.json -o -rs 'T[2]_(IT|CH|CN|US|UK)_\w+' -ir
 
 cd ..
 
 runner --cfg VHccPoCo/cfg_VHbb_ZLL.py -o output_vhbb_zll_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhbb_zll_local.log  # local test
+runner --cfg VHccPoCo/cfg_VHbb_WLNu.py -o output_vhbb_wln_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhbb_wln_local.log  # local test
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py -o output_vhbb_zll_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhbb_zll_local.log  # local test
+
+runner --cfg VHccPoCo/cfg_VHhh_ZLL.py -o output_vhhh_zll_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhhh_zll_local.log  # local test
+
 
 runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_all_1113 2>&1 | tee dask_out_1113.log &
+
+runner --cfg VHccPoCo/cfg_VHhh_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhhh_zll_sig_dask 2>&1 | tee dask_out_1206.log &
+
 
 cd output_vhbb_zll_dev_all_1113
 
 make-plots -i output_all.coffea --cfg parameters_dump.yaml -o plots -op ../VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_plot_options_vhbb_ZLL.yaml
 
 
-
+python VHccPoCo/scripts/convertToRoot.py vhbb_zll_dev_all_1203/output_all.coffea -c VHccPoCo/params/shapemaker_vhbb_run3/Zll_Shape.yaml
 
 
 pocket-coffea merge-outputs -i output_DATA_SingleMuon_2018_EraA.coffea -i output_DATA_SingleMuon_2018_EraB.coffea -i output_DATA_SingleMuon_2018_EraC.coffea -i output_DATA_SingleMuon_2018_EraD.coffea -i output_DYJetsToLL_M-50_2018.coffea -o output_all.coffea
@@ -25,11 +33,54 @@ runner --cfg VHccPoCo/cfg_VHbb_ZLL.py -o output_vhbb_zll_dev_local --executor fu
 runner --cfg VHccPoCo/cfg_VHcc_ZLL.py -o output_vhcc_zll_dev_local --executor futures -s 10 -lf 10000 -lc 10000 2>&1 | tee output_vhcc_zll_local.log
 
 
-
-
-
-
 runner --cfg VHccPoCo/cfg_VHbb_WLNu.py -o output_vhbb_wln_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhbb_wln_local.log
 
 
 runner --cfg VHccPoCo/cfg_VHbb_ZNuNu.py -o output_vhbb_znn_dev_local --executor futures -s 10 -lf 1 -lc 1 2>&1 | tee output_vhbb_znn_local.log
+
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_all_1202 2>&1 | tee dask_out_1202.log &
+
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_WW_1202 2>&1 | tee dask_out_WW_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_ZZ_1202 2>&1 | tee dask_out_ZZ_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_WZ_1202 2>&1 | tee dask_out_WZ_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_SIG_1202 2>&1 | tee dask_out_SIG_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_DATAEGamma_1202 2>&1 | tee dask_out_DATAEGamma_1202.log &
+
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_DATADoubleMuon_1202 2>&1 | tee dask_out_DATADoubleMuon_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_DY_1202 2>&1 | tee dask_out_DY_1202.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_DYSlices_1203 2>&1 | tee dask_out_DYSlices_1203.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_TT_1203 2>&1 | tee dask_out_TT_1203.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_ZLL.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_zll_dev_DATAEGamma_1203 2>&1 | tee dask_out_DATAEGamma_1203.log &
+
+
+
+pocket-coffea merge-outputs output_vhbb_zll_dev_DATADoubleMuon_1202/output_all.coffea  output_vhbb_zll_dev_DATAEGamma_1203/output_all.coffea  output_vhbb_zll_dev_DY_1203/output_all.coffea  output_vhbb_zll_dev_SIG_1202/output_all.coffea  output_vhbb_zll_dev_WW_1202/output_all.coffea  output_vhbb_zll_dev_WZ_1202/output_all.coffea  output_vhbb_zll_dev_ZZ_1202/output_all.coffea output_vhbb_zll_dev_TT_1203/output_all.coffea output_vhbb_zll_dev_STOP_1203/output_all.coffea  -o output_vhbb_zll_dev_all_1203/output_all.coffea
+
+
+cd output_vhbb_zll_dev_all_1203
+make-plots -i output_all.coffea --cfg parameters_dump.yaml -o plots -op ../VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_plot_options_vhbb_ZLL.yaml &
+
+
+
+runner --cfg VHccPoCo/cfg_VHbb_WLNu.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_wln_dev_DATA_1204 2>&1 | tee dask_out_DATA_1204.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_WLNu.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_wln_dev_SIG_1204 2>&1 | tee dask_out_SIG_1204.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_WLNu.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_wln_dev_TOP_1204 2>&1 | tee dask_out_TOP_1204.log &
+
+runner --cfg VHccPoCo/cfg_VHbb_WLNu.py --executor dask@lxplus --custom-run-options VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_run_options_vhbb_test.yaml  -o output_vhbb_wln_dev_VJet_1204 2>&1 | tee dask_out_VJet_1204.log &
+
+pocket-coffea merge-outputs output_vhbb_wln_dev_DATA_1204/output_all.coffea  output_vhbb_wln_dev_SIG_1204/output_all.coffea  output_vhbb_wln_dev_TOP_1204/output_all.coffea output_vhbb_wln_dev_VV_1204/output_all.coffea -o vhbb_wln_dev_all_1204/output_all.coffea
+
+make-plots -i output_all.coffea --cfg parameters_dump.yaml -o plots -op ../VHccPoCo/params/skip_plot_opt_vhbb_run3/custom_plot_options_vhbb_WLNu.yaml &

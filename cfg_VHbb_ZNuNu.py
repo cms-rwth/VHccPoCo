@@ -60,14 +60,19 @@ files_Run3 = [
 ]
 
 parameters["proc_type"] = "ZNuNu"
-parameters["save_arrays"] = True
+parameters["save_arrays"] = False
 parameters["separate_models"] = False
+parameters["run_bdt"] = False
 parameters['run_dnn'] = False
 ctx = click.get_current_context()
 outputdir = ctx.params.get('outputdir')
 
 outVariables = [
     "nJet",
+    "dibjet_m", "dibjet_pt", "dibjet_dr", "dibjet_deltaPhi", "dibjet_deltaEta",
+    "dibjet_pt_max", "dibjet_pt_min", "dibjet_mass_max", "dibjet_mass_min",
+    "dibjet_BvsL_max", "dibjet_BvsL_min", "VHbb_pt_ratio", "VHbb_deltaPhi",
+    "JetGood_Ht", "Z_pt", "Z_phi", "Z_eta"
 ]
 
 
@@ -80,13 +85,21 @@ cfg = Configurator(
         
         "filter" : {
             "samples": [
-                # "MET",
-                "ZH_Hto2B_Zto2Nu",
+                "DATA_MET",
+                "WW",
+                "WZ",
+                "ZZ",
+                #"QCD",
+                "ZJetsToNuNu_NJPT_FxFx",
+                "WJetsToLNu_FxFx",
+                #"WJetsToQQ_MLM",
+                "TTToSemiLeptonic",
+                "TTToHadrons",
+                "SingleTop",
                 # "ZH_Hto2C_Zto2Nu",
-                # "ZJetsToNuNu_NJPT_FxFx",
-                # "TTTo2L2Nu",
-                # "TTToHadrons",
-                # "TTToSemiLeptonic"
+                # "ggZH_Hto2C_Zto2Nu",
+                "ZH_Hto2B_Zto2Nu",
+                "ggZH_Hto2B_Zto2Nu"
             ],
             "samples_exclude" : [],
             #"year": ['2022_preEE','2022_postEE','2023_preBPix','2023_postBPix']
@@ -95,21 +108,26 @@ cfg = Configurator(
         },
 
         "subsamples": {
-          # 'ZJetsToNuNu_NJPT_FxFx': {
-          #      'DiJet_incl': [passthrough],
-          #      'DiJet_bx': [DiJet_bx],
-          #      'DiJet_cx': [DiJet_cx],
-          #      'DiJet_ll': [DiJet_ll],
-          #  }
+          'WJetsToLNu_FxFx': {
+                'DiJet_incl': [passthrough],
+                'DiJet_bx': [DiJet_bx],
+                'DiJet_cx': [DiJet_cx],
+                'DiJet_ll': [DiJet_ll],
+            },
+            'ZJetsToNuNu_NJPT_FxFx': {
+                'DiJet_incl': [passthrough],
+                'DiJet_bx': [DiJet_bx],
+                'DiJet_cx': [DiJet_cx],
+                'DiJet_ll': [DiJet_ll],
+            }
         }
 
     },
 
     workflow = VHbbBaseProcessor,
     workflow_options = {"dump_columns_as_arrays_per_chunk": 
-                        "root://eosuser.cern.ch//eos/user/l/lichengz/Column_output_vhbb_zll_all_1117/"} if parameters["save_arrays"] else {},
+                        "root://eosuser.cern.ch//eos/user/l/lichengz/Saved_output_arrays_ZNuNu_VJet_1204/"} if parameters["save_arrays"] else {},else {},
 
-    # save_skimmed_files = "root://eosuser.cern.ch://eos/user/l/lichengz/skimmed_samples/Run3ZLL/",
     skim = [get_HLTsel(primaryDatasets=["MET"]),
             get_nObj_min(2, 32., "Jet"),
             get_nPVgood(1), eventFlags, goldenJson],
@@ -120,25 +138,25 @@ cfg = Configurator(
                     ],
   
     categories = {
-      "baseline_ZNNHBB_2J": [passthrough],
+      "baseline_ZNNHBB_2J_nn": [passthrough],
       
-      "SR_MET2B": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
+      "SR_MET2B_nn": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
                    VH_dPhi_cut(2.2), HV_pTRatio_cut_0p5to2,
                    bjet_tagger('DeepFlav', 0, 'T', False), bjet_tagger('DeepFlav', 1, 'M', False)],
       
-      "CR_LF": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
+      "CR_LF_nn": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
                 VH_dPhi_cut(2.2), HV_pTRatio_cut_0p5to2,
                 bjet_tagger('DeepFlav', 0, 'M', True), bjet_tagger('DeepFlav', 1, 'L', True)],
       
-      "CR_B": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
+      "CR_B_nn": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
                VH_dPhi_cut(2.2), HV_pTRatio_cut_0p5to2,
                bjet_tagger('DeepFlav', 0, 'T', False), bjet_tagger('DeepFlav', 1, 'M', True)],
       
-      "CR_BB": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
+      "CR_BB_nn": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(1, False),
                 VH_dPhi_cut(2.2), HV_pTRatio_cut_0p5to2,
                 bjet_tagger('DeepFlav', 0, 'T', False), bjet_tagger('DeepFlav', 1, 'M', False)],
       
-      "CR_TT": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(2, True),
+      "CR_TT_nn": [nAddLep_cut_0, bJ_pt_cut(60, 35), nAddJetCut(2, True),
                 VH_dPhi_cut(2.2), HV_pTRatio_cut_0p5to2, min_dPhi_bJ_MET_1p57,
                 bjet_tagger('DeepFlav', 0, 'T', False), bjet_tagger('DeepFlav', 1, 'M', False)],
     },
@@ -147,12 +165,12 @@ cfg = Configurator(
     columns = {
         "common": {
             "bycategory": {
-                    "baseline_ZNNHBB_2J": [ ColOut("events", outVariables, flatten=False), ],
-                    "SR_MET2B": [ ColOut("events", outVariables, flatten=False), ],
-                    "CR_LF": [ ColOut("events", outVariables, flatten=False), ],
-                    "CR_B": [ ColOut("events", outVariables, flatten=False), ],
-                    "CR_BB": [ ColOut("events", outVariables, flatten=False), ],
-                    "CR_TT": [ ColOut("events", outVariables, flatten=False), ]
+                    "baseline_ZNNHBB_2J_nn": [ ColOut("events", outVariables, flatten=False), ],
+                    "SR_MET2B_nn": [ ColOut("events", outVariables, flatten=False), ],
+                    "CR_LF_nn": [ ColOut("events", outVariables, flatten=False), ],
+                    "CR_B_nn": [ ColOut("events", outVariables, flatten=False), ],
+                    "CR_BB_nn": [ ColOut("events", outVariables, flatten=False), ],
+                    "CR_TT_nn": [ ColOut("events", outVariables, flatten=False), ]
                 }
          },
     },
@@ -171,9 +189,8 @@ cfg = Configurator(
             }
         },
         "bysample": {
-            # "ZJetsToNuNu_NJPT_FxFx": {"inclusive": ["weight_vjet"] },
-            #"DYJetsToLL_MiNNLO_ZptWei": {"inclusive": ["genWeight"] }
-            
+            "ZJetsToNuNu_NJPT_FxFx": {"inclusive": ["weight_vjet"] },
+            "WJetsToLNu_FxFx": {"inclusive": ["weight_vjet"] },            
         },
     },
     
@@ -212,23 +229,55 @@ cfg = Configurator(
         
         "dibjet_m" : HistConf( [Axis(field="dibjet_m", bins=100, start=0, stop=600, label=r"$M_{bb}$ [GeV]")] ),
         "dibjet_m_zoom" : HistConf( [Axis(field="dibjet_m", bins=25, start=0, stop=600, label=r"$M_{bb}$ [GeV]")] ),
+
         "dibjet_pt" : HistConf( [Axis(field="dibjet_pt", bins=100, start=0, stop=400, label=r"$p_T{bb}$ [GeV]")] ),
+        "dibjet_pt_zoom" : HistConf( [Axis(field="dibjet_pt", bins=25, start=0, stop=400, label=r"$p_T{bb}$ [GeV]")] ),
+
         "dibjet_dr" : HistConf( [Axis(field="dibjet_dr", bins=50, start=0, stop=5, label=r"$\Delta R_{bb}$")] ),
+        "dibjet_dr_zoom" : HistConf( [Axis(field="dibjet_dr", bins=25, start=0, stop=5, label=r"$\Delta R_{bb}$")] ),
+
         "dibjet_deltaPhi": HistConf( [Axis(field="dibjet_deltaPhi", bins=50, start=0, stop=math.pi, label=r"$\Delta \phi_{bb}$")] ),
+        "dibjet_deltaPhi_zoom": HistConf( [Axis(field="dibjet_deltaPhi", bins=25, start=0, stop=math.pi, label=r"$\Delta \phi_{bb}$")] ),
+
         "dibjet_deltaEta": HistConf( [Axis(field="dibjet_deltaEta", bins=50, start=0, stop=4, label=r"$\Delta \eta_{bb}$")] ),
+        "dibjet_deltaEta_zoom": HistConf( [Axis(field="dibjet_deltaEta", bins=25, start=0, stop=4, label=r"$\Delta \eta_{bb}$")] ),
+
         "dibjet_pt_max" : HistConf( [Axis(field="dibjet_pt_max", bins=100, start=0, stop=400, label=r"$p_T{b1}$ [GeV]")] ),
+        "dibjet_pt_max_zoom" : HistConf( [Axis(field="dibjet_pt_max", bins=25, start=0, stop=400, label=r"$p_T{b1}$ [GeV]")] ),
+
         "dibjet_pt_min" : HistConf( [Axis(field="dibjet_pt_min", bins=100, start=0, stop=400, label=r"$p_T{b2}$ [GeV]")] ),
+        "dibjet_pt_min_zoom" : HistConf( [Axis(field="dibjet_pt_min", bins=25, start=0, stop=400, label=r"$p_T{b2}$ [GeV]")] ),
+
         "dibjet_mass_max" : HistConf( [Axis(field="dibjet_mass_max", bins=100, start=0, stop=600, label=r"$M_{b1}$ [GeV]")] ),
+        "dibjet_mass_max_zoom" : HistConf( [Axis(field="dibjet_mass_max", bins=25, start=0, stop=600, label=r"$M_{b1}$ [GeV]")] ),
+
         "dibjet_mass_min" : HistConf( [Axis(field="dibjet_mass_min", bins=100, start=0, stop=600, label=r"$M_{b2}$ [GeV]")] ),
+        "dibjet_mass_min_zoom" : HistConf( [Axis(field="dibjet_mass_min", bins=25, start=0, stop=600, label=r"$M_{b2}$ [GeV]")] ),
+
         "dibjet_BvsL_max" : HistConf( [Axis(field="dibjet_BvsL_max", bins=24, start=0, stop=1, label=r"$BvsL_{bj1}$ [GeV]")] ),
+        "dibjet_BvsL_max_zoom" : HistConf( [Axis(field="dibjet_BvsL_max", bins=12, start=0, stop=1, label=r"$BvsL_{bj1}$ [GeV]")] ),
+
         "dibjet_BvsL_min" : HistConf( [Axis(field="dibjet_BvsL_min", bins=24, start=0, stop=1, label=r"$BvsL_{bj2}$ [GeV]")] ),
+        "dibjet_BvsL_min_zoom" : HistConf( [Axis(field="dibjet_BvsL_min", bins=12, start=0, stop=1, label=r"$BvsL_{bj2}$ [GeV]")] ),
 
-        "VHbb_pt_ratio" : HistConf( [Axis(field="VHbb_pt_ratio", bins=24, start=0, stop=2, label=r"$p_T{H}/p_T{Z}")] ),
+        "VHbb_pt_ratio" : HistConf( [Axis(field="VHbb_pt_ratio", bins=24, start=0, stop=2, label=r"$p_T{H}/p_T{Z}$")] ),
+        "VHbb_pt_ratio_zoom" : HistConf( [Axis(field="VHbb_pt_ratio", bins=12, start=0, stop=2, label=r"$p_T{H}/p_T{Z}$")] ),
+
         "VHbb_deltaPhi" : HistConf( [Axis(field="VHbb_deltaPhi", bins=50, start=0, stop=math.pi, label=r"$\Delta \phi_{ZH}$")] ),
+        "VHbb_deltaPhi_zoom" : HistConf( [Axis(field="VHbb_deltaPhi", bins=25, start=0, stop=math.pi, label=r"$\Delta \phi_{ZH}$")] ),
 
-#         "HT":  HistConf( [Axis(field="JetGood_Ht", bins=100, start=0, stop=700, label=r"Jet HT [GeV]")] ),
-#         "met_pt": HistConf( [Axis(coll="MET", field="pt", bins=50, start=0, stop=200, label=r"MET $p_T$ [GeV]")] ),
-#         "met_phi": HistConf( [Axis(coll="MET", field="phi", bins=50, start=-math.pi, stop=math.pi, label=r"MET $phi$")] ),
+        "HT":  HistConf( [Axis(field="JetGood_Ht", bins=100, start=0, stop=700, label=r"Jet HT [GeV]")] ),
+        "HT_zoom": HistConf( [Axis(field="JetGood_Ht", bins=50, start=0, stop=700, label=r"Jet HT [GeV]")] ),
+
+        "Z_pt":  HistConf( [Axis(field="Z_pt", bins=50, start=0, stop=200, label=r"MET $p_T$ [GeV]")] ),
+        "Z_pt_zoom": HistConf( [Axis(field="Z_pt", bins=25, start=0, stop=200, label=r"MET $p_T$ [GeV]")] ),
+
+        "Z_phi": HistConf( [Axis(field="Z_phi", bins=50, start=-math.pi, stop=math.pi, label=r"MET $phi$")] ),
+        "Z_phi_zoom": HistConf( [Axis(field="Z_phi", bins=25, start=-math.pi, stop=math.pi, label=r"MET $phi$")] ),
+
+        "Z_eta": HistConf( [Axis(field="Z_eta", bins=50, start=-2.5, stop=2.5, label=r"$\eta_{MET}$")] ),
+        "Z_eta_zoom": HistConf( [Axis(field="Z_eta", bins=25, start=-2.5, stop=2.5, label=r"$\eta_{MET}$")] ),
+
 
 #         "BDT": HistConf( [Axis(field="BDT", bins=24, start=0, stop=1, label="BDT")],
 #                          only_categories = ['SR_mumu_2J_cJ','SR_ee_2J_cJ','SR_ll_2J_cJ','SR_ll_2J_cJ_low','SR_ll_2J_cJ_high']),
