@@ -5,14 +5,14 @@ from pocket_coffea.lib.cut_functions import get_nPVgood, goldenJson, eventFlags,
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
 from pocket_coffea.lib.weights.common.common import common_weights
-import workflow_VHcc
 from pocket_coffea.lib.columns_manager import ColOut
 import click
+import workflow_VHcc
 from workflow_VHcc import VHccBaseProcessor
-import vjet_weights 
-from vjet_weights import *
 import CommonSelectors
 from CommonSelectors import *
+import vjet_weights 
+from vjet_weights import *
 import MVA
 from MVA.gnnmodels import GraphAttentionClassifier
 from MVA.training import process_gnn_inputs
@@ -60,7 +60,7 @@ files_Run3 = [
 ]
 
 parameters["proc_type"] = "ZLL"
-parameters["save_arrays"] = True
+parameters["save_arrays"] = False
 parameters["separate_models"] = False
 parameters['run_dnn'] = False
 parameters['run_gnn'] = True
@@ -77,23 +77,23 @@ cfg = Configurator(
         "filter" : {
             "samples": [
                 "DATA_DoubleMuon",
-                #"DATA_DoubleEG", # in 2016/2017
-                "DATA_EGamma",   # in 2018/2022/2023
-                ##"DATA_SingleMuon",
-                ##"DATA_SingleElectron",
-	        "WW", "WZ", "ZZ",
+                ### #"DATA_DoubleEG", # in 2016/2017
+                ### "DATA_EGamma",   # in 2018/2022/2023
+                ### ##"DATA_SingleMuon",
+                ### ##"DATA_SingleElectron",
+	        ### "WW", "WZ", "ZZ",
                 "DYJetsToLL_FxFx",
-                #"DYJetsToLL_MLM",
-                #"WJetsToLNu_FxFx",
-                #"TTToSemiLeptonic",
-                #"DYJetsToLL_MiNNLO",
-                #"DYJetsToLL_MiNNLO_ZptWei",
-                "TTTo2L2Nu",
-                "SingleTop",
-                "ZH_Hto2C_Zto2L",
-                "ggZH_Hto2C_Zto2L",
-                "ZH_Hto2B_Zto2L",
-                "ggZH_Hto2B_Zto2L"
+                ### #"DYJetsToLL_MLM",
+                ### #"WJetsToLNu_FxFx",
+                ### #"TTToSemiLeptonic",
+                ### #"DYJetsToLL_MiNNLO",
+                ### #"DYJetsToLL_MiNNLO_ZptWei",
+                ### "TTTo2L2Nu",
+                ### "SingleTop",
+                ### "ZH_Hto2C_Zto2L",
+                ### "ggZH_Hto2C_Zto2L",
+                ### "ZH_Hto2B_Zto2L",
+                ### "ggZH_Hto2B_Zto2L"
             ],
             "samples_exclude" : [],
             #"year": ['2017']

@@ -1,0 +1,12 @@
+retries: 2
+skip-bad-files: true
+mem-per-worker: "4GB"
+chunksize: 50000
+worker-image: /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/pocketcoffea:lxplus-el9-latest
+local-virtualenv: true
+
+#20 minutes
+queue: espresso     # 20 minutes
+#queue: microcentury # 1 hour
+#queue: longlunch    # 2 hours
+#queue: workday      # 8 hours

@@ -4,20 +4,23 @@ from pocket_coffea.lib.cut_functions import get_nObj_min, get_HLTsel
 from pocket_coffea.lib.cut_functions import get_nPVgood, goldenJson, eventFlags, get_JetVetoMap
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
+from pocket_coffea.lib.weights.common.common import common_weights
 from pocket_coffea.lib.columns_manager import ColOut
 import click
 import workflow_VHcc
 from workflow_VHcc import VHccBaseProcessor
+import CommonSelectors
+from CommonSelectors import *
+import vjet_weights 
+from vjet_weights import *
 import MVA
 from MVA.gnnmodels import GraphAttentionClassifier
 from MVA.training import process_gnn_inputs
 
-import CommonSelectors
-from CommonSelectors import *
-
 import cloudpickle
 cloudpickle.register_pickle_by_value(workflow_VHcc)
 cloudpickle.register_pickle_by_value(CommonSelectors)
+cloudpickle.register_pickle_by_value(vjet_weights)
 cloudpickle.register_pickle_by_value(MVA)
 
 import os
@@ -34,7 +37,6 @@ parameters = defaults.merge_parameters_from_files(default_parameters,
                                                   f"{localdir}/params/ctagging.yaml",
                                                   f"{localdir}/params/trainings.yaml",
                                                   update=True)
-
 files_2016 = [
     f"{localdir}/datasets/Run2UL2016_MC_VJets.json",
     f"{localdir}/datasets/Run2UL2016_MC_OtherBkg.json",
@@ -59,15 +61,16 @@ files_Run3 = [
 ]
 
 parameters["proc_type"] = "ZNuNu"
-parameters["save_arrays"] = True
-parameters["separate_models"] = False
 parameters['run_dnn'] = False
 parameters['run_gnn'] = True
+parameters["save_arrays"] = False
+parameters["save_gnn_arrays"] = False
 ctx = click.get_current_context()
 outputdir = ctx.params.get('outputdir')
 
 cfg = Configurator(
     parameters = parameters,
+    weights_classes = common_weights + [custom_weight_vjet],
     datasets = {
         #"jsons": files_2016 + files_2017 + files_2018,
         "jsons": files_Run3,
@@ -116,13 +119,13 @@ cfg = Configurator(
             'WJetsToLNu_FxFx': {
                 'DiJet_incl': [passthrough],
                 'DiJet_bx': [DiJet_bx],
-		        'DiJet_cx': [DiJet_cx],
+		'DiJet_cx': [DiJet_cx],
                 'DiJet_ll': [DiJet_ll],
             },
             'ZJetsToNuNu_NJPT_FxFx': {
                 'DiJet_incl': [passthrough],
                 'DiJet_bx': [DiJet_bx],
-		        'DiJet_cx': [DiJet_cx],
+		'DiJet_cx': [DiJet_cx],
                 'DiJet_ll': [DiJet_ll],
             }
         }
@@ -148,10 +151,10 @@ cfg = Configurator(
         "SR_Znn_2J_cJ":  [dijet_pt_cut, jet_met_dphi_cut, ctag_j1, dijet_mass_cut],
 
         "CR_Znn_2J_LF": [dijet_pt_cut, jet_met_dphi_cut, antictag_j1, dijet_mass_cut],
-	    "CR_Znn_2J_HF": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut],
+	"CR_Znn_2J_HF": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut],
         "CR_Znn_2J_CC": [dijet_pt_cut, jet_met_dphi_cut, ctag_j1, dijet_invmass_cut],
-        "CR_Znn_4J_TT": [dijet_pt_cut, jet_met_dphi_cut, btag_j1, dijet_mass_cut]
-
+        "CR_Znn_4J_TT": [dijet_pt_cut, jet_met_dphi_cut, four_jets, btag_j1, dijet_mass_cut],
+        "CR_Znn_4J_1L_TT": [dijet_pt_cut, jet_met_dphi_cut, four_jets, btag_j1, dijet_mass_cut, get_nObj_min(1, 20., "LeptonGood")]
     },
 
     columns = {
@@ -160,7 +163,7 @@ cfg = Configurator(
                 "SR_Znn_2J_cJ": [
                     ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
                                         "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
-                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
+                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi",
                                         "JetGood_btagCvL","JetGood_btagCvB",
                                         "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
                                         "Z_pt","Z_eta","Z_phi","Z_m",
@@ -171,7 +174,7 @@ cfg = Configurator(
                 "baseline_Met_2J_ptcut": [
                     ColOut("events", [  "EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
                                         "dijet_CvsL_max", "dijet_CvsL_min", "dijet_CvsB_max", "dijet_CvsB_min",
-                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi", "Z_pt",
+                                        "dijet_pt_max", "dijet_pt_min", "ZH_pt_ratio", "ZH_deltaPhi",
                                         "JetGood_btagCvL","JetGood_btagCvB",
                                         "JetGood_pt","JetGood_eta","JetGood_phi","JetGood_mass",
                                         "Z_pt","Z_eta","Z_phi","Z_m",
@@ -187,7 +190,7 @@ cfg = Configurator(
                     ]
                 }
         },
-    } if parameters['run_gnn'] else {},
+    } if parameters['save_gnn_arrays'] else {},
 
     weights = {
         "common": {
@@ -202,6 +205,8 @@ cfg = Configurator(
             #}
         },
         "bysample": {
+            "ZJetsToNuNu_NJPT_FxFx": {"inclusive": ["weight_vjet"] },
+            "WJetsToLNu_FxFx": {"inclusive": ["weight_vjet"] }
         }
     },
 
@@ -219,6 +224,12 @@ cfg = Configurator(
             "bysample": {
             }
         },
+        "shape": {
+            "common":{
+                #"inclusive": [ "JES_Total_AK4PFchs", "JER_AK4PFchs" ] # For Run2UL
+                "inclusive": [ "JES_Total_AK4PFPuppi", "JER_AK4PFPuppi" ] # For Run3
+            }
+        }
     },
 
 
@@ -265,11 +276,11 @@ cfg = Configurator(
         "met_deltaPhi_j1": HistConf( [Axis(field="deltaPhi_jet1_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 1)")] ),
         "met_deltaPhi_j2": HistConf( [Axis(field="deltaPhi_jet2_MET", bins=64, start=0, stop=math.pi, label=r"$\Delta\phi$(MET, jet 2)")] ),
 
-        "BDT": HistConf( [Axis(field="BDT", bins=10000, start=0, stop=1, label="BDT")],
+        "BDT": HistConf( [Axis(field="BDT", bins=2000, start=0, stop=1, label="BDT")],
                          only_categories = ['SR_Znn_2J_cJ']),
-        "DNN": HistConf( [Axis(field="DNN", bins=10000, start=0, stop=1, label="DNN")],
+        "DNN": HistConf( [Axis(field="DNN", bins=100, start=0, stop=1, label="DNN")],
                          only_categories = ['SR_Znn_2J_cJ']),
-        "GNN": HistConf( [Axis(field="GNN", bins=10000, start=0, stop=1, label="GNN")],
+        "GNN": HistConf( [Axis(field="GNN", bins=2000, start=0, stop=1, label="GNN")],
                          only_categories = ['SR_Znn_2J_cJ']),
 
         "BDT_coarse": HistConf( [Axis(field="BDT", bins=24, start=0, stop=1, label="BDT")],
@@ -278,15 +289,15 @@ cfg = Configurator(
                                 only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
         "GNN_coarse": HistConf( [Axis(field="GNN", bins=24, start=0, stop=1, label="GNN")],
                                 only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
-      
-        "GNN_transformed": HistConf( [Axis(field="GNN_transformed", bins=10000, start=0, stop=1, label="GNN")],
+
+        "GNN_transformed": HistConf( [Axis(field="GNN_transformed", bins=2000, start=0, stop=1, label="GNN")],
                          only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
 
         "GNN_transformed_coarse": HistConf( [Axis(field="GNN_transformed", bins=24, start=0, stop=1, label="GNN")],
                          only_categories = ['SR_Znn_2J_cJ','baseline_Met_2J_ptcut']),
-
+        
         # 2D plots
-	    "Njet_Ht": HistConf([ Axis(coll="events", field="nJetGood",bins=[0,2,3,4,8],
+	"Njet_Ht": HistConf([ Axis(coll="events", field="nJetGood",bins=[0,2,3,4,8],
                                    type="variable", label="N. Jets (good)"),
                               Axis(coll="events", field="JetGood_Ht",
                                    bins=[0,80,150,200,300,450,700],

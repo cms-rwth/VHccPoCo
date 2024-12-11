@@ -4,20 +4,23 @@ from pocket_coffea.lib.cut_functions import get_nObj_min, get_HLTsel
 from pocket_coffea.lib.cut_functions import get_nPVgood, goldenJson, eventFlags, get_JetVetoMap
 from pocket_coffea.parameters.cuts import passthrough
 from pocket_coffea.parameters.histograms import *
+from pocket_coffea.lib.weights.common.common import common_weights
 from pocket_coffea.lib.columns_manager import ColOut
 import click
 import workflow_VHcc
 from workflow_VHcc import VHccBaseProcessor
+import CommonSelectors
+from CommonSelectors import *
+import vjet_weights
+from vjet_weights import *
 import MVA
 from MVA.gnnmodels import GraphAttentionClassifier
 from MVA.training import process_gnn_inputs
 
-import CommonSelectors
-from CommonSelectors import *
-
 import cloudpickle
 cloudpickle.register_pickle_by_value(workflow_VHcc)
 cloudpickle.register_pickle_by_value(CommonSelectors)
+cloudpickle.register_pickle_by_value(vjet_weights)
 cloudpickle.register_pickle_by_value(MVA)
 
 import os
@@ -60,15 +63,16 @@ files_Run3 = [
 ]
 
 parameters["proc_type"] = "WLNu"
-parameters["save_arrays"] = True
-parameters["separate_models"] = False
+parameters["save_arrays"] = False
 parameters['run_dnn'] = False
 parameters['run_gnn'] = True
+parameters["save_gnn_arrays"] = False
 ctx = click.get_current_context()
 outputdir = ctx.params.get('outputdir')
 
 cfg = Configurator(
     parameters = parameters,
+    weights_classes = common_weights + [custom_weight_vjet],
     datasets = {
         #"jsons": files_2016 + files_2017 + files_2018,
         #"jsons": files_2017,
@@ -87,18 +91,19 @@ cfg = Configurator(
                 #"WJetsToLNu_NJPT_FxFx",
                 #"WJetsToLNu_MLM",
                 #"WJetsToQQ_MLM",
-                "DYJetsToLL_FxFx",
+                #"DYJetsToLL_FxFx",
                 "TTToSemiLeptonic",
-                "TTTo2L2Nu",
+                #"TTTo2L2Nu",
                 "SingleTop",
                 #"TTToHadrons",
                 "WH_Hto2C_WtoLNu",
+                "WH_Hto2B_WtoLNu",
             ],
             "samples_exclude" : [],
             #"year": ['2017']
             #"year": ['2016_PreVFP', '2016_PostVFP', '2017', '2018']
             #"year": ['2022_preEE','2022_postEE']
-            "year": ['2022_preEE','2022_postEE']
+            "year": ['2022_preEE']
         },
         "subsamples": {
             'DYJetsToLL_MLM': {
@@ -153,7 +158,6 @@ cfg = Configurator(
         "CR_Wen_2J_CC": [wlnu_plus_2j('el'), ctag_j1, dijet_invmass_cut],
         "CR_Wen_4J_TT": [wlnu_plus_2j('el'), four_jets, btag_j1, dijet_mass_cut]
 
-
     },
 
     columns = {
@@ -170,9 +174,8 @@ cfg = Configurator(
                                       "LeptonGood_miniPFRelIso_all","LeptonGood_pfRelIso03_all",
                                       "LeptonGood_pt","LeptonGood_eta","LeptonGood_phi","LeptonGood_mass",
                                       "W_pt","W_eta","W_phi","W_mt",
-                                      "PuppiMET_pt","PuppiMET_phi","nPV","W_m","LeptonCategory"] + [
-                                        "GNN","GNN_transformed"
-                                      ] if parameters['run_gnn'] else [], flatten=False),
+                                      "PuppiMET_pt","PuppiMET_phi","nPV","W_m","LeptonCategory"] +
+                           ["GNN","GNN_transformed"] if parameters['run_gnn'] else [], flatten=False),
                 ],
                 "presel_Wln_2J": [
                     ColOut("events", ["EventNr", "dijet_m", "dijet_pt", "dijet_dr", "dijet_deltaPhi", "dijet_deltaEta",
@@ -197,7 +200,7 @@ cfg = Configurator(
                     ]
                 }
         },
-    } if parameters['run_gnn'] else {},
+    } if parameters['save_gnn_arrays'] else {},
 
     weights = {
         "common": {
@@ -213,6 +216,8 @@ cfg = Configurator(
             #}
         },
         "bysample": {
+            #"DYJetsToLL_FxFx": {"inclusive": ["weight_vjet"] },
+            "WJetsToLNu_FxFx": {"inclusive": ["weight_vjet"] },
         }
     },
 

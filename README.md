@@ -22,6 +22,7 @@
     conda install pytorch::pytorch
     conda install conda-forge:alive-progress
     conda install conda-forge:optuna
+    conda install conda-forge:imblearn
     ```
     For brux20 cluster at Brown, you may need `conda install conda-forge::ca-certificates`.
 3. Checkout *this* repo:
